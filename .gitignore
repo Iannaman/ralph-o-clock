@@ -1,0 +1,32 @@
+# --- File di sistema di Windows ---
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# --- File temporanei e di log di PowerShell ---
+*.log
+*.log.*
+.history/
+*__history.ps1
+
+# --- Moduli e dati locali di PowerShell (se scaricati localmente) ---
+# Scommenta la riga sotto se salvi i moduli di terze parti nella cartella del progetto
+# /Modules/
+
+# --- Configurazione dei Text Editor / IDE ---
+# Visual Studio Code
+.vscode/
+!.vscode/extensions.json
+
+# Notepad++ (file di backup e temporanei)
+*.bak
+*.tmp
+
+# --- Credenziali e Dati Sensibili ---
+# Se usi script per automazione, assicurati di NON caricare mai file di credenziali
+*credenziali*
+*credentials*
+*.pfx
+*.cer
+secrets.*
