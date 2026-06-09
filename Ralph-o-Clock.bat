@@ -14,14 +14,16 @@ Add-Type -AssemblyName System.Drawing
 # --- Configurazione File e Icona ---
 $cartellaScript = $env:BATDIR
 if ([string]::IsNullOrWhiteSpace($cartellaScript)) { $cartellaScript = [System.IO.Directory]::GetCurrentDirectory() }
-$script:csvPath = Join-Path $cartellaScript "registro_orari.csv"
-$iconPath = Join-Path $cartellaScript "ralph.ico"
-$audioPath = Join-Path $cartellaScript "Ralph-bark.wav"
-$audioAlarmPath = Join-Path $cartellaScript "let-the-dogs-out.wav"
+$fileImpostazioni = Join-Path $cartellaScript "dati\settings.txt"
+$fileCSV = Join-Path $cartellaScript "dati\registro_orari.csv" # Consiglio di spostare anche questo in dati!
+$iconPath = Join-Path $cartellaScript "img\ralph.ico"
+$imgPath = Join-Path $cartellaScript "img\ralph.png"
+$audioPath = Join-Path $cartellaScript "audio\Ralph-bark.wav"
+$audioAlarmPath = Join-Path $cartellaScript "audio\let-the-dogs-out.wav"
 
 
 ### funziona salva memoria
-$settingsPath = Join-Path $cartellaScript "settings.txt"
+$settingsPath = Join-Path $cartellaScript "dati\settings.txt"
 
 function Save-Settings {
     "$($chkStretch.Checked)|$($txtStretchMin.Text)|$($chkAutoStart.Checked)" | Out-File $settingsPath
@@ -95,7 +97,7 @@ $picRalph.Size = New-Object System.Drawing.Size(100, 100)
 $picRalph.SizeMode = [System.Windows.Forms.PictureBoxSizeMode]::StretchImage
 
 # Costruisce il percorso e carica direttamente il file PNG
-$pngPath = Join-Path $cartellaScript "ralph.png"
+$pngPath = Join-Path $cartellaScript "img\ralph.png"
 if (Test-Path $pngPath) {
     $picRalph.Image = [System.Drawing.Image]::FromFile($pngPath)
 }
@@ -386,15 +388,15 @@ $btnInfoAwake.Add_Click({
 })
 
 $awakeTimer = New-Object System.Windows.Forms.Timer
-$awakeTimer.Interval = 180000 # 180.000 millisecondi = 3 minuti
+$awakeTimer.Interval = 120000 # 120.000 millisecondi = 2 minuti
 
 $chkAwake.Add_CheckedChanged({
     # Definisce i percorsi delle nuove icone e immagini
-    $iconPathGuardia = Join-Path $cartellaScript "Ralph-cane-guardia.ico"
-    $pngPathGuardia = Join-Path $cartellaScript "Ralph-cane-guardia.png"
+    $iconPathGuardia = Join-Path $cartellaScript "img\Ralph-cane-guardia.ico"
+    $pngPathGuardia = Join-Path $cartellaScript "img\Ralph-cane-guardia.png"
     
     # Percorso dell'immagine originale
-    $pngPathStandard = Join-Path $cartellaScript "ralph.png"
+    $pngPathStandard = Join-Path $cartellaScript "img\ralph.png"
     
     if ($chkAwake.Checked) {
         $awakeTimer.Start()
@@ -829,16 +831,23 @@ function Salva-TabellaSuCSV {
 }
 
 # =========================================================================
-# INTEGRAZIONE POMODORO TIMER, IMPOSTAZIONI E TAB CONTROL
+# INTEGRAZIONE POMODORO TIMER, IMPOSTAZIONI, DIARIO E TAB CONTROL
 # =========================================================================
 [console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
+# --- 0. Creazione Cartelle Organizzative ---
+$cartelleApp = @("audio", "dati", "img")
+foreach ($c in $cartelleApp) {
+    $dirPath = Join-Path $cartellaScript $c
+    if (-not (Test-Path $dirPath)) { New-Item -ItemType Directory -Force -Path $dirPath | Out-Null }
+}
+
 # --- 1. Gestione Impostazioni Audio Custom ---
-$script:audioSettingsPath = Join-Path $cartellaScript "audio_settings.txt"
-$script:audioGambe = Join-Path $cartellaScript "Ralph-bark.wav"
-$script:audioSveglia = Join-Path $cartellaScript "let-the-dogs-out.wav"
-$script:audioPomoFine = Join-Path $cartellaScript "let-the-dogs-out.wav"
-$script:audioPomoPausa = Join-Path $cartellaScript "Ralph-bark.wav"
+$script:audioSettingsPath = Join-Path $cartellaScript "dati\audio_settings.txt"
+$script:audioGambe = Join-Path $cartellaScript "audio\Ralph-bark.wav"
+$script:audioSveglia = Join-Path $cartellaScript "audio\let-the-dogs-out.wav"
+$script:audioPomoFine = Join-Path $cartellaScript "audio\let-the-dogs-out.wav"
+$script:audioPomoPausa = Join-Path $cartellaScript "audio\Ralph-bark.wav"
 
 function Load-AudioSettings {
     if (Test-Path $script:audioSettingsPath) {
@@ -856,7 +865,6 @@ function Save-AudioSettings {
 }
 Load-AudioSettings
 
-# Sovrascrive le funzioni audio per usare i nuovi percorsi dinamici
 function Play-StartupSound {
     if (Test-Path $script:audioGambe) {
         Start-Job -ScriptBlock { $player = New-Object System.Media.SoundPlayer($using:script:audioGambe); $player.PlaySync() } | Out-Null
@@ -893,6 +901,11 @@ $tabPomodoro.Text = "Pomodoro Timer"
 $tabPomodoro.BackColor = $bgColor
 $tabControl.TabPages.Add($tabPomodoro)
 
+$tabDiario = New-Object System.Windows.Forms.TabPage
+$tabDiario.Text = "Diario Agenda"
+$tabDiario.BackColor = $bgColor
+$tabControl.TabPages.Add($tabDiario)
+
 $tabImpostazioni = New-Object System.Windows.Forms.TabPage
 $tabImpostazioni.Text = "Impostazioni Audio"
 $tabImpostazioni.BackColor = $bgColor
@@ -901,7 +914,7 @@ $tabControl.TabPages.Add($tabImpostazioni)
 $form.Controls.Add($tabControl)
 
 # --- Spostamento Dinamico Registro ---
-$controlliDestri = @($lblTitleReg, $flpMesi, $dgv, $lblBilancioMensile, $lblStatUmore, $btnUpdateTabella, $btnEliminaRiga, $btnSvuotaDB)
+$controlliDestri = @($lblTitleReg, $flpMesi, $dgv, $lblBilancioMensile, $lblStatUmore, $btnUpdateTabella , $btnEliminaRiga, $btnSvuotaDB)
 foreach ($ctrl in $controlliDestri) {
     if ($null -ne $ctrl) {
         $form.Controls.Remove($ctrl)
@@ -910,8 +923,15 @@ foreach ($ctrl in $controlliDestri) {
     }
 }
 
-# --- 3. Setup Tab Impostazioni Audio ---
-function Add-AudioSettingUI($labelText, $defaultPath, $y) {
+# ---# --- 3. Setup Tab Impostazioni Audio ---
+
+# Definiamo i TextBox a livello di script per "blindarli" ed evitare che perdano la proprietà .Text
+$script:txtGambe = New-Object System.Windows.Forms.TextBox
+$script:txtSveglia = New-Object System.Windows.Forms.TextBox
+$script:txtPomoFine = New-Object System.Windows.Forms.TextBox
+$script:txtPomoPausa = New-Object System.Windows.Forms.TextBox
+
+function Crea-RigaAudio($labelText, $txtBox, $defaultPath, $y) {
     $lbl = New-Object System.Windows.Forms.Label
     $lbl.Text = $labelText
     $lbl.Location = New-Object System.Drawing.Point(20, $y)
@@ -919,16 +939,13 @@ function Add-AudioSettingUI($labelText, $defaultPath, $y) {
     $lbl.Font = $fontLabelBold
     $tabImpostazioni.Controls.Add($lbl)
     
-    $txt = New-Object System.Windows.Forms.TextBox
-    $txt.Text = $defaultPath
-    # FIX: Parentesi aggiunte per forzare il calcolo prima della virgola
-    $txt.Location = New-Object System.Drawing.Point(20, ($y + 25))
-    $txt.Size = New-Object System.Drawing.Size(510, 25)
-    $tabImpostazioni.Controls.Add($txt)
+    $txtBox.Text = $defaultPath
+    $txtBox.Location = New-Object System.Drawing.Point(20, ($y + 25))
+    $txtBox.Size = New-Object System.Drawing.Size(510, 25)
+    $tabImpostazioni.Controls.Add($txtBox)
     
     $btn = New-Object System.Windows.Forms.Button
     $btn.Text = "Sfoglia..."
-    # FIX: Parentesi aggiunte
     $btn.Location = New-Object System.Drawing.Point(540, ($y + 24))
     $btn.Size = New-Object System.Drawing.Size(80, 27)
     $tabImpostazioni.Controls.Add($btn)
@@ -937,19 +954,18 @@ function Add-AudioSettingUI($labelText, $defaultPath, $y) {
         $dialog = New-Object System.Windows.Forms.OpenFileDialog
         $dialog.Filter = "File Audio (*.wav)|*.wav|Tutti i file (*.*)|*.*"
         if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
-            $txt.Text = $dialog.FileName
+            $txtBox.Text = $dialog.FileName
         }
     })
-    return $txt
 }
 
-$txtGambe = Add-AudioSettingUI "Suono Sgranchisci Gambe (Timer 45m):" $script:audioGambe 30
-$txtSveglia = Add-AudioSettingUI "Suono Sveglia Uscita Lavoro:" $script:audioSveglia 100
-$txtPomoFine = Add-AudioSettingUI "Suono Fine Focus Pomodoro (Inizio Pausa):" $script:audioPomoFine 170
-$txtPomoPausa = Add-AudioSettingUI "Suono Fine Pausa Pomodoro (Ritorno Focus):" $script:audioPomoPausa 240
+Crea-RigaAudio "Suono Sgranchisci Gambe (Timer 45m):" $script:txtGambe $script:audioGambe 30
+Crea-RigaAudio "Suono Sveglia Uscita Lavoro:" $script:txtSveglia $script:audioSveglia 100
+Crea-RigaAudio "Suono Fine Focus Pomodoro (Inizio Pausa):" $script:txtPomoFine $script:audioPomoFine 170
+Crea-RigaAudio "Suono Fine Pausa Pomodoro (Ritorno Focus):" $script:txtPomoPausa $script:audioPomoPausa 240
 
 $btnSaveAudio = New-Object System.Windows.Forms.Button
-$btnSaveAudio.Text = "Salva Impostazioni Audio"
+$btnSaveAudio.Text = "💾 Salva Impostazioni Audio"
 $btnSaveAudio.Location = New-Object System.Drawing.Point(20, 320)
 $btnSaveAudio.Size = New-Object System.Drawing.Size(250, 40)
 $btnSaveAudio.BackColor = [System.Drawing.Color]::FromArgb(37, 99, 235)
@@ -958,22 +974,109 @@ $btnSaveAudio.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
 $tabImpostazioni.Controls.Add($btnSaveAudio)
 
 $btnSaveAudio.Add_Click({
-    $script:audioGambe = $txtGambe.Text
-    $script:audioSveglia = $txtSveglia.Text
-    $script:audioPomoFine = $txtPomoFine.Text
-    $script:audioPomoPausa = $txtPomoPausa.Text
+    # Ora andiamo a leggere le proprietà dal riferimento script sicuro
+    $script:audioGambe = $script:txtGambe.Text
+    $script:audioSveglia = $script:txtSveglia.Text
+    $script:audioPomoFine = $script:txtPomoFine.Text
+    $script:audioPomoPausa = $script:txtPomoPausa.Text
+    
     Save-AudioSettings
-    [System.Windows.Forms.MessageBox]::Show("Impostazioni audio salvate! Al prossimo avviso verr� usato il nuovo file.", "Ralph-o-Clock", 0, 64)
+    [System.Windows.Forms.MessageBox]::Show("Impostazioni audio salvate!", "Ralph-o-Clock", 0, 64)
 })
 
-# --- 4. Setup Interfaccia Tab Pomodoro e CSV ---
+# --- 4. Setup Tab Diario Agenda ---
+$script:diarioCsvPath = Join-Path $cartellaScript "dati\diario_agenda.csv"
+$script:diarioNotes = @{}
+
+function Load-Diario {
+    if (Test-Path $script:diarioCsvPath) {
+        $righe = Import-Csv $script:diarioCsvPath -Delimiter ";" -Encoding UTF8
+        foreach ($r in $righe) {
+            if ($null -ne $r.Data) { $script:diarioNotes[$r.Data] = $r.Note }
+        }
+    }
+}
+function Save-Diario {
+    $lista = New-Object System.Collections.Generic.List[PSObject]
+    foreach ($key in $script:diarioNotes.Keys) {
+        $lista.Add([PSCustomObject]@{ Data = $key; Note = $script:diarioNotes[$key] })
+    }
+    $lista | Export-Csv -Path $script:diarioCsvPath -NoTypeInformation -Delimiter ";" -Encoding UTF8
+}
+
+$calDiario = New-Object System.Windows.Forms.MonthCalendar
+$calDiario.Location = New-Object System.Drawing.Point(20, 20)
+$tabDiario.Controls.Add($calDiario)
+
+$lblDiarioTitle = New-Object System.Windows.Forms.Label
+$lblDiarioTitle.Text = "Note dell'agenda per il giorno selezionato:"
+$lblDiarioTitle.Font = $fontLabelBold
+$lblDiarioTitle.Location = New-Object System.Drawing.Point(260, 20)
+$lblDiarioTitle.Size = New-Object System.Drawing.Size(360, 20)
+$tabDiario.Controls.Add($lblDiarioTitle)
+
+$txtDiarioNote = New-Object System.Windows.Forms.TextBox
+$txtDiarioNote.Multiline = $true
+$txtDiarioNote.ScrollBars = [System.Windows.Forms.ScrollBars]::Vertical
+$txtDiarioNote.Location = New-Object System.Drawing.Point(260, 45)
+$txtDiarioNote.Size = New-Object System.Drawing.Size(360, 400)
+$txtDiarioNote.Font = New-Object System.Drawing.Font("Segoe UI", 10)
+$tabDiario.Controls.Add($txtDiarioNote)
+
+$btnSaveDiario = New-Object System.Windows.Forms.Button
+$btnSaveDiario.Text = "💾 Salva Pagina Diario"
+$btnSaveDiario.Location = New-Object System.Drawing.Point(260, 460)
+$btnSaveDiario.Size = New-Object System.Drawing.Size(180, 35)
+$btnSaveDiario.BackColor = [System.Drawing.Color]::FromArgb(37, 99, 235)
+$btnSaveDiario.ForeColor = [System.Drawing.Color]::White
+$btnSaveDiario.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+$tabDiario.Controls.Add($btnSaveDiario)
+
+$chkAutosave = New-Object System.Windows.Forms.CheckBox
+$chkAutosave.Text = "🔄 Autosalvataggio"
+$chkAutosave.Location = New-Object System.Drawing.Point(455, 465)
+$chkAutosave.Size = New-Object System.Drawing.Size(160, 25)
+$chkAutosave.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+$chkAutosave.Checked = $false
+$tabDiario.Controls.Add($chkAutosave)
+
+Load-Diario
+$oggiStr = [DateTime]::Now.ToString("yyyy-MM-dd")
+if ($script:diarioNotes.ContainsKey($oggiStr)) { $txtDiarioNote.Text = $script:diarioNotes[$oggiStr] }
+
+$calDiario.Add_DateSelected({
+    $dataSel = $calDiario.SelectionStart.ToString("yyyy-MM-dd")
+    if ($script:diarioNotes.ContainsKey($dataSel)) {
+        $txtDiarioNote.Text = $script:diarioNotes[$dataSel]
+    } else {
+        $txtDiarioNote.Text = ""
+    }
+})
+
+$btnSaveDiario.Add_Click({
+    $dataSel = $calDiario.SelectionStart.ToString("yyyy-MM-dd")
+    $script:diarioNotes[$dataSel] = $txtDiarioNote.Text
+    Save-Diario
+    [System.Windows.Forms.MessageBox]::Show("Nota salvata per il giorno $dataSel!", "Diario Agenda", 0, 64)
+})
+
+$txtDiarioNote.Add_TextChanged({
+    if ($chkAutosave.Checked -and $txtDiarioNote.Focused) {
+        $dataSel = $calDiario.SelectionStart.ToString("yyyy-MM-dd")
+        $script:diarioNotes[$dataSel] = $txtDiarioNote.Text
+        Save-Diario
+    }
+})
+
+# --- 5. Setup Interfaccia Tab Pomodoro e CSV ---
 $script:pomoFocusTime = 25 * 60
 $script:pomoBreakTime = 5 * 60
 $script:pomoSeconds = $script:pomoFocusTime
 $script:pomoState = "IDLE"
-$pomoIconPath = Join-Path $cartellaScript "pomodoro.ico"
-$script:pomoCsvPath = Join-Path $cartellaScript "pomodoro_tasks.csv"
-$script:templatePath = Join-Path $cartellaScript "pomodoro_templates.txt"
+$pomoIconPath = Join-Path $cartellaScript "img\pomodoro.ico"
+$script:pomoCsvPath = Join-Path $cartellaScript "dati\pomodoro_tasks.csv"
+$script:templatePath = Join-Path $cartellaScript "dati\pomodoro_templates.csv"
+$script:activePomoRow = $null
 
 $lblPomoTime = New-Object System.Windows.Forms.Label
 $lblPomoTime.Text = "25:00"
@@ -997,7 +1100,7 @@ $lblStimaFine.Size = New-Object System.Drawing.Size(300, 20)
 $tabPomodoro.Controls.Add($lblStimaFine)
 
 $btnDeleteTask = New-Object System.Windows.Forms.Button
-$btnDeleteTask.Text = "Elimina Task"
+$btnDeleteTask.Text = "🗑 Elimina Task"
 $btnDeleteTask.Location = New-Object System.Drawing.Point(500, 105)
 $btnDeleteTask.Size = New-Object System.Drawing.Size(120, 25)
 $tabPomodoro.Controls.Add($btnDeleteTask)
@@ -1016,7 +1119,7 @@ $dgvTasks.Columns.Add("RottenPomo", "Marci") | Out-Null
 $dgvTasks.Columns.Add("Note", "Note") | Out-Null
 
 $btnStartPomo = New-Object System.Windows.Forms.Button
-$btnStartPomo.Text = "Avvia Focus"
+$btnStartPomo.Text = "▶ Avvia Focus"
 $btnStartPomo.Location = New-Object System.Drawing.Point(20, 355)
 $btnStartPomo.Size = New-Object System.Drawing.Size(110, 40)
 $btnStartPomo.BackColor = [System.Drawing.Color]::FromArgb(37, 99, 235)
@@ -1025,7 +1128,7 @@ $btnStartPomo.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
 $tabPomodoro.Controls.Add($btnStartPomo)
 
 $btnBreak = New-Object System.Windows.Forms.Button
-$btnBreak.Text = "Pausa"
+$btnBreak.Text = "☕ Pausa"
 $btnBreak.Location = New-Object System.Drawing.Point(135, 355)
 $btnBreak.Size = New-Object System.Drawing.Size(100, 40)
 $btnBreak.BackColor = [System.Drawing.Color]::DarkSeaGreen
@@ -1033,7 +1136,7 @@ $btnBreak.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
 $tabPomodoro.Controls.Add($btnBreak)
 
 $btnStopPomo = New-Object System.Windows.Forms.Button
-$btnStopPomo.Text = "Ferma (Marcio)"
+$btnStopPomo.Text = "🛑 Ferma (Marcio)"
 $btnStopPomo.Location = New-Object System.Drawing.Point(240, 355)
 $btnStopPomo.Size = New-Object System.Drawing.Size(120, 40)
 $btnStopPomo.BackColor = [System.Drawing.Color]::IndianRed
@@ -1044,42 +1147,71 @@ $tabPomodoro.Controls.Add($btnStopPomo)
 $lblTemplateTitle = New-Object System.Windows.Forms.Label
 $lblTemplateTitle.Text = "Template:"
 $lblTemplateTitle.Location = New-Object System.Drawing.Point(20, 415)
-$lblTemplateTitle.Size = New-Object System.Drawing.Size(65, 20)
+$lblTemplateTitle.Size = New-Object System.Drawing.Size(60, 20)
 $tabPomodoro.Controls.Add($lblTemplateTitle)
 
 $cbTemplates = New-Object System.Windows.Forms.ComboBox
-$cbTemplates.Location = New-Object System.Drawing.Point(85, 412)
-$cbTemplates.Size = New-Object System.Drawing.Size(200, 25)
+$cbTemplates.Location = New-Object System.Drawing.Point(80, 412)
+$cbTemplates.Size = New-Object System.Drawing.Size(160, 25)
 $tabPomodoro.Controls.Add($cbTemplates)
 
+$lblNumPomo = New-Object System.Windows.Forms.Label
+$lblNumPomo.Text = "Pomo:"
+$lblNumPomo.Location = New-Object System.Drawing.Point(245, 415)
+$lblNumPomo.Size = New-Object System.Drawing.Size(40, 20)
+$tabPomodoro.Controls.Add($lblNumPomo)
+
+$numPomoTemplate = New-Object System.Windows.Forms.NumericUpDown
+$numPomoTemplate.Location = New-Object System.Drawing.Point(285, 412)
+$numPomoTemplate.Size = New-Object System.Drawing.Size(50, 25)
+$numPomoTemplate.Minimum = 1
+$numPomoTemplate.Maximum = 20
+$numPomoTemplate.Value = 1
+$tabPomodoro.Controls.Add($numPomoTemplate)
+
 $btnApplyTemplate = New-Object System.Windows.Forms.Button
-$btnApplyTemplate.Text = "Applica"
-$btnApplyTemplate.Location = New-Object System.Drawing.Point(295, 410)
-$btnApplyTemplate.Size = New-Object System.Drawing.Size(90, 28)
+$btnApplyTemplate.Text = "➕ Applica"
+$btnApplyTemplate.Location = New-Object System.Drawing.Point(345, 410)
+$btnApplyTemplate.Size = New-Object System.Drawing.Size(85, 28)
 $tabPomodoro.Controls.Add($btnApplyTemplate)
 
 $btnSaveTemplate = New-Object System.Windows.Forms.Button
-$btnSaveTemplate.Text = "Salva"
-$btnSaveTemplate.Location = New-Object System.Drawing.Point(390, 410)
+$btnSaveTemplate.Text = "💾 Salva"
+$btnSaveTemplate.Location = New-Object System.Drawing.Point(435, 410)
 $btnSaveTemplate.Size = New-Object System.Drawing.Size(80, 28)
 $tabPomodoro.Controls.Add($btnSaveTemplate)
 
 $btnDelTemplate = New-Object System.Windows.Forms.Button
-$btnDelTemplate.Text = "Elimina"
-$btnDelTemplate.Location = New-Object System.Drawing.Point(475, 410)
+$btnDelTemplate.Text = "🗑 Elimina"
+$btnDelTemplate.Location = New-Object System.Drawing.Point(520, 410)
 $btnDelTemplate.Size = New-Object System.Drawing.Size(80, 28)
 $tabPomodoro.Controls.Add($btnDelTemplate)
 
+# --- Logica di Caricamento Template Strutturati ---
+$script:listaTemplate = @()
 if (-not (Test-Path $script:templatePath)) {
-    $defaultTemplates = @("Analisi di Materialità (3)", "Riunione Interoperabilità (2)", "Sviluppo Codice (4)", "Review Email (1)")
-    $defaultTemplates | Set-Content -Path $script:templatePath -Encoding UTF8
+    @"
+TemplateName;EstPomo
+Analisi di Materialità;3
+Riunione Interoperabilità;2
+Sviluppo Codice;4
+Review Email;1
+"@ | Set-Content -Path $script:templatePath -Encoding UTF8
 }
-$cbTemplates.Items.AddRange([string[]](Get-Content $script:templatePath -Encoding UTF8))
+$script:listaTemplate = Import-Csv $script:templatePath -Delimiter ";" -Encoding UTF8
+foreach ($t in $script:listaTemplate) { $cbTemplates.Items.Add($t.TemplateName) | Out-Null }
 
-# --- 5. Logica Core Pomodoro ---
-$pomoTimer = New-Object System.Windows.Forms.Timer
-$pomoTimer.Interval = 1000
+$cbTemplates.Add_SelectedIndexChanged({
+    $selText = $cbTemplates.Text
+    $match = $script:listaTemplate | Where-Object { $_.TemplateName -eq $selText }
+    if ($null -ne $match) {
+        $val = 1
+        [int]::TryParse($match.EstPomo, [ref]$val) | Out-Null
+        $numPomoTemplate.Value = $val
+    }
+})
 
+# --- 6. Logica Core Pomodoro ed Evidenziazione ---
 function Save-PomoTasks {
     $lista = New-Object System.Collections.Generic.List[PSObject]
     foreach ($row in $dgvTasks.Rows) {
@@ -1113,7 +1245,9 @@ function Update-EstimateFinish {
         [int]::TryParse($row.Cells["EstPomo"].Value, [ref]$est) | Out-Null
         [int]::TryParse($row.Cells["DonePomo"].Value, [ref]$done) | Out-Null
         
-        if ($done -gt $est -and $est -gt 0) {
+        if ($script:activePomoRow -and $row -eq $script:activePomoRow) {
+            $row.DefaultCellStyle.BackColor = [System.Drawing.Color]::LightYellow
+        } elseif ($done -gt $est -and $est -gt 0) {
             $row.DefaultCellStyle.BackColor = [System.Drawing.Color]::LightCoral
         } else {
             $row.DefaultCellStyle.BackColor = [System.Drawing.Color]::White
@@ -1138,10 +1272,14 @@ $dgvTasks.Add_CellValueChanged({ Update-EstimateFinish })
 
 $btnDeleteTask.Add_Click({
     if ($dgvTasks.CurrentRow -ne $null -and -not $dgvTasks.CurrentRow.IsNewRow) {
+        if ($script:activePomoRow -eq $dgvTasks.CurrentRow) { $script:activePomoRow = $null }
         $dgvTasks.Rows.Remove($dgvTasks.CurrentRow)
         Update-EstimateFinish
     }
 })
+
+$pomoTimer = New-Object System.Windows.Forms.Timer
+$pomoTimer.Interval = 1000
 
 $pomoTimer.Add_Tick({
     if ($script:pomoSeconds -gt 0) {
@@ -1158,10 +1296,11 @@ $pomoTimer.Add_Tick({
         
         if ($script:pomoState -eq "FOCUS") {
             Play-PomoFineSound 
-            if ($dgvTasks.CurrentRow -ne $null -and -not $dgvTasks.CurrentRow.IsNewRow) {
+            if ($script:activePomoRow -ne $null) {
                 $done = 0
-                [int]::TryParse($dgvTasks.CurrentRow.Cells["DonePomo"].Value, [ref]$done) | Out-Null
-                $dgvTasks.CurrentRow.Cells["DonePomo"].Value = ($done + 1).ToString()
+                [int]::TryParse($script:activePomoRow.Cells["DonePomo"].Value, [ref]$done) | Out-Null
+                $script:activePomoRow.Cells["DonePomo"].Value = ($done + 1).ToString()
+                $script:activePomoRow = $null
             }
             $script:pomoState = "BREAK"
             $script:pomoSeconds = $script:pomoBreakTime
@@ -1169,6 +1308,7 @@ $pomoTimer.Add_Tick({
             $lblPomoStatus.Text = "Pausa - Ralph ti consiglia di sgranchirti!"
             if (Test-Path $iconPath) { $sysTrayIcon.Icon = New-Object System.Drawing.Icon($iconPath) }
             
+            Update-EstimateFinish
             [System.Windows.Forms.MessageBox]::Show("Pomodoro completato! Fai 5 minuti di pausa.", "Ralph-o-Clock", 0, 64)
             $pomoTimer.Start()
         } elseif ($script:pomoState -eq "BREAK") {
@@ -1184,9 +1324,16 @@ $pomoTimer.Add_Tick({
 
 $btnStartPomo.Add_Click({
     if ($script:pomoState -eq "IDLE" -or $script:pomoState -eq "BREAK") {
+        if ($dgvTasks.CurrentRow -ne $null -and -not $dgvTasks.CurrentRow.IsNewRow) {
+            $script:activePomoRow = $dgvTasks.CurrentRow
+            $script:activePomoRow.DefaultCellStyle.BackColor = [System.Drawing.Color]::LightYellow
+            $lblPomoStatus.Text = "🎯 In Focus su: " + $script:activePomoRow.Cells["TaskName"].Value
+        } else {
+            $script:activePomoRow = $null
+            $lblPomoStatus.Text = "Focus Time: Nessun progetto selezionato!"
+        }
         $script:pomoState = "FOCUS"
         $script:pomoSeconds = $script:pomoFocusTime
-        $lblPomoStatus.Text = "Focus Time: Nessuna distrazione!"
         if (Test-Path $pomoIconPath) { $sysTrayIcon.Icon = New-Object System.Drawing.Icon($pomoIconPath) }
         Update-EstimateFinish
         $pomoTimer.Start()
@@ -1194,20 +1341,27 @@ $btnStartPomo.Add_Click({
 })
 
 $btnBreak.Add_Click({
+    if ($script:activePomoRow -ne $null) {
+        $script:activePomoRow.DefaultCellStyle.BackColor = [System.Drawing.Color]::White
+        $script:activePomoRow = $null
+    }
     $script:pomoState = "BREAK"
     $script:pomoSeconds = $script:pomoBreakTime
     $lblPomoStatus.Text = "Pausa Forzata"
     if (Test-Path $iconPath) { $sysTrayIcon.Icon = New-Object System.Drawing.Icon($iconPath) }
+    Update-EstimateFinish
     $pomoTimer.Start()
 })
 
 $btnStopPomo.Add_Click({
     if ($script:pomoState -eq "FOCUS") {
         $pomoTimer.Stop()
-        if ($dgvTasks.CurrentRow -ne $null -and -not $dgvTasks.CurrentRow.IsNewRow) {
+        if ($script:activePomoRow -ne $null) {
             $marci = 0
-            [int]::TryParse($dgvTasks.CurrentRow.Cells["RottenPomo"].Value, [ref]$marci) | Out-Null
-            $dgvTasks.CurrentRow.Cells["RottenPomo"].Value = ($marci + 1).ToString()
+            [int]::TryParse($script:activePomoRow.Cells["RottenPomo"].Value, [ref]$marci) | Out-Null
+            $script:activePomoRow.Cells["RottenPomo"].Value = ($marci + 1).ToString()
+            $script:activePomoRow.DefaultCellStyle.BackColor = [System.Drawing.Color]::White
+            $script:activePomoRow = $null
         }
         $script:pomoState = "IDLE"
         $script:pomoSeconds = $script:pomoFocusTime
@@ -1219,42 +1373,40 @@ $btnStopPomo.Add_Click({
     }
 })
 
+# --- Azioni Gestione Template Sincronizzate ---
 $btnApplyTemplate.Add_Click({
     $testo = $cbTemplates.Text.Trim()
-    if ($testo -match "^(.*)\s*\((\d+)\)$") {
-        $dgvTasks.Rows.Add($matches[1].Trim(), $matches[2], "0", "0", "") | Out-Null
+    $pomoVal = [int]$numPomoTemplate.Value
+    if ($testo -ne "") {
+        $dgvTasks.Rows.Add($testo, $pomoVal.ToString(), "0", "0", "") | Out-Null
         Update-EstimateFinish
-    } else {
-        [System.Windows.Forms.MessageBox]::Show("Scrivi o seleziona nel formato: Nome (Numero)`nEs: Pausa (1)", "Attenzione", 0, 48)
     }
 })
 
 $btnSaveTemplate.Add_Click({
     $testo = $cbTemplates.Text.Trim()
-    if ($testo -match "^(.*)\s*\((\d+)\)$") {
-        if (-not $cbTemplates.Items.Contains($testo)) {
-            $cbTemplates.Items.Add($testo) | Out-Null
-            $items = $cbTemplates.Items | ForEach-Object { $_.ToString() }
-            $items | Set-Content -Path $script:templatePath -Encoding UTF8
-            [System.Windows.Forms.MessageBox]::Show("Template salvato con successo!", "Ralph-o-Clock", 0, 64)
-        } else {
-            [System.Windows.Forms.MessageBox]::Show("Questo template esiste gi� in lista.", "Attenzione", 0, 48)
-        }
-    } else {
-        [System.Windows.Forms.MessageBox]::Show("Formato non valido! Usa: Nome (Numero)", "Errore", 0, 48)
+    $pomoVal = [int]$numPomoTemplate.Value
+    if ($testo -ne "") {
+        $esiste = $script:listaTemplate | Where-Object { $_.TemplateName -eq $testo }
+        if ($null -eq $esiste) { $cbTemplates.Items.Add($testo) | Out-Null }
+        
+        $script:listaTemplate = $script:listaTemplate | Where-Object { $_.TemplateName -ne $testo }
+        $script:listaTemplate += [PSCustomObject]@{ TemplateName = $testo; EstPomo = $pomoVal.ToString() }
+        $script:listaTemplate | Export-Csv -Path $script:templatePath -NoTypeInformation -Delimiter ";" -Encoding UTF8
+        [System.Windows.Forms.MessageBox]::Show("Template salvato con successo!", "Ralph-o-Clock", 0, 64)
     }
 })
 
 $btnDelTemplate.Add_Click({
-    if ($cbTemplates.SelectedItem) {
-        $daRimuovere = $cbTemplates.SelectedItem.ToString()
-        $cbTemplates.Items.Remove($daRimuovere)
+    if ($cbTemplates.Text -ne "") {
+        $testo = $cbTemplates.Text
+        $cbTemplates.Items.Remove($testo)
         $cbTemplates.Text = ""
-        $items = $cbTemplates.Items | ForEach-Object { $_.ToString() }
-        $items | Set-Content -Path $script:templatePath -Encoding UTF8
+        
+        $script:listaTemplate = $script:listaTemplate | Where-Object { $_.TemplateName -ne $testo }
+        $script:listaTemplate | Export-Csv -Path $script:templatePath -NoTypeInformation -Delimiter ";" -Encoding UTF8
+        $numPomoTemplate.Value = 1
         [System.Windows.Forms.MessageBox]::Show("Template eliminato.", "Ralph-o-Clock", 0, 64)
-    } else {
-        [System.Windows.Forms.MessageBox]::Show("Seleziona un template dalla lista per eliminarlo.", "Attenzione", 0, 48)
     }
 })
 # =========================================================================
