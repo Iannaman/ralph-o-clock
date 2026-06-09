@@ -69,7 +69,7 @@ function Play-AlarmSound {
 # --- Configurazione File di Database ---
 $cartellaScript = $env:BATDIR
 if ([string]::IsNullOrWhiteSpace($cartellaScript)) { $cartellaScript = [System.IO.Directory]::GetCurrentDirectory() }
-$script:csvPath = Join-Path $cartellaScript "registro_orari.csv"
+$script:csvPath = Join-Path $cartellaScript "dati\registro_orari.csv"
 
 # --- Configurazione Stile ---
 $fontLabel = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Regular)
