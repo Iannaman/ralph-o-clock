@@ -12,10 +12,11 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
 # --- Configurazione File e Icona ---
+$usr = $env:USERNAME # Cattura l'utente Windows attuale
 $cartellaScript = $env:BATDIR
 if ([string]::IsNullOrWhiteSpace($cartellaScript)) { $cartellaScript = [System.IO.Directory]::GetCurrentDirectory() }
-$fileImpostazioni = Join-Path $cartellaScript "dati\settings.txt"
-$fileCSV = Join-Path $cartellaScript "dati\registro_orari.csv" # Consiglio di spostare anche questo in dati!
+$fileImpostazioni = Join-Path $cartellaScript "dati\settings_$usr.txt"
+$fileCSV = Join-Path $cartellaScript "dati\registro_orari_$usr.csv"
 $iconPath = Join-Path $cartellaScript "img\ralph.ico"
 $imgPath = Join-Path $cartellaScript "img\ralph.png"
 $audioPath = Join-Path $cartellaScript "audio\Ralph-bark.wav"
@@ -23,7 +24,7 @@ $audioAlarmPath = Join-Path $cartellaScript "audio\let-the-dogs-out.wav"
 
 
 ### funziona salva memoria
-$settingsPath = Join-Path $cartellaScript "dati\settings.txt"
+$settingsPath = Join-Path $cartellaScript "dati\settings_$usr.txt"
 
 function Save-Settings {
     "$($chkStretch.Checked)|$($txtStretchMin.Text)|$($chkAutoStart.Checked)" | Out-File $settingsPath
@@ -45,32 +46,37 @@ function Load-Settings {
     }
 }
 
-# --- Funzione Audio ---
 function Play-StartupSound {
-    if (Test-Path $audioPath) {
-        #job in background
-        Start-Job -ScriptBlock {
-            $player = New-Object System.Media.SoundPlayer($using:audioPath)
-            $player.PlaySync() 
-        } | Out-Null
+    if (Test-Path $script:audioGambe) {
+        $player = New-Object System.Media.SoundPlayer($script:audioGambe)
+        $player.Play()
     }
 }
-
 function Play-AlarmSound {
-    if (Test-Path $audioAlarmPath) {
-        $player = New-Object System.Media.SoundPlayer($audioAlarmPath)
+    if (Test-Path $script:audioSveglia) {
+        $player = New-Object System.Media.SoundPlayer($script:audioSveglia)
         $player.Play()
-    } else {
-        # Fallback se il file manca
-        for ($i=0; $i -lt 5; $i++) { [System.Console]::Beep(880, 400); Start-Sleep -Milliseconds 200 }
+    } else { 
+        for ($i=0; $i -lt 5; $i++) { [System.Console]::Beep(880, 400); Start-Sleep -Milliseconds 200 } 
     }
+}
+function Play-PomoFineSound {
+    if (Test-Path $script:audioPomoFine) {
+        $player = New-Object System.Media.SoundPlayer($script:audioPomoFine)
+        $player.Play()
+    } else { Play-AlarmSound }
+}
+function Play-PomoPausaSound {
+    if (Test-Path $script:audioPomoPausa) {
+        $player = New-Object System.Media.SoundPlayer($script:audioPomoPausa)
+        $player.Play()
+    } else { Play-StartupSound }
 }
 
 # --- Configurazione File di Database ---
 $cartellaScript = $env:BATDIR
 if ([string]::IsNullOrWhiteSpace($cartellaScript)) { $cartellaScript = [System.IO.Directory]::GetCurrentDirectory() }
-$script:csvPath = Join-Path $cartellaScript "dati\registro_orari.csv"
-
+$script:csvPath = Join-Path $cartellaScript "dati\registro_orari_$usr.csv"
 # --- Configurazione Stile ---
 $fontLabel = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Regular)
 $fontLabelBold = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
@@ -82,7 +88,7 @@ $script:ultimoConsuntivo = $null
 
 # --- Finestra Principale ---
 $form = New-Object System.Windows.Forms.Form
-$form.Text = "Ralph-o-Clock - Registro Orari & Umore - v.2.1" 
+$form.Text = "Ralph-o-Clock - Registro Orari & Umore - v.3.01" 
 $form.Size = New-Object System.Drawing.Size(1100, 830)
 $form.StartPosition = "CenterScreen"
 $form.FormBorderStyle = "FixedDialog"
@@ -388,53 +394,40 @@ $btnInfoAwake.Add_Click({
 })
 
 $awakeTimer = New-Object System.Windows.Forms.Timer
-$awakeTimer.Interval = 120000 # 120.000 millisecondi = 2 minuti
+# Abbassiamo a 59 secondi (59000 ms) per evitare che il timer di inattività di Windows scatti
+$awakeTimer.Interval = 59000 
 
 $chkAwake.Add_CheckedChanged({
-    # Definisce i percorsi delle nuove icone e immagini
     $iconPathGuardia = Join-Path $cartellaScript "img\Ralph-cane-guardia.ico"
     $pngPathGuardia = Join-Path $cartellaScript "img\Ralph-cane-guardia.png"
-    
-    # Percorso dell'immagine originale
     $pngPathStandard = Join-Path $cartellaScript "img\ralph.png"
     
     if ($chkAwake.Checked) {
         $awakeTimer.Start()
         $sysTrayIcon.Text = "Cane guardia attivo"
         
-        # Imposta l'icona nella barra delle applicazioni
-        if (Test-Path $iconPathGuardia) {
-            $sysTrayIcon.Icon = New-Object System.Drawing.Icon($iconPathGuardia)
-        }
-        
+        # Cambia l'icona nella barra
+        if (Test-Path $iconPathGuardia) { $sysTrayIcon.Icon = New-Object System.Drawing.Icon($iconPathGuardia) }
         # Cambia l'immagine all'interno del Form principale
-        if (Test-Path $pngPathGuardia) {
-            $picRalph.Image = [System.Drawing.Image]::FromFile($pngPathGuardia)
-        }
+        if (Test-Path $pngPathGuardia) { $picRalph.Image = [System.Drawing.Image]::FromFile($pngPathGuardia) }
     } else {
         $awakeTimer.Stop()
         $sysTrayIcon.Text = "Cane guardia disattivo"
         
-        # Ripristina l'icona standard di Ralph nella barra
-        if (Test-Path $iconPath) {
-            $sysTrayIcon.Icon = New-Object System.Drawing.Icon($iconPath)
-        } else {
-            $sysTrayIcon.Icon = [System.Drawing.SystemIcons]::Information
-        }
-        
-        # Ripristina l'immagine standard all'interno del Form
-        if (Test-Path $pngPathStandard) {
-            $picRalph.Image = [System.Drawing.Image]::FromFile($pngPathStandard)
-        }
+        # Ripristina l'icona standard
+        if (Test-Path $iconPath) { $sysTrayIcon.Icon = New-Object System.Drawing.Icon($iconPath) } else { $sysTrayIcon.Icon = [System.Drawing.SystemIcons]::Information }
+        # Ripristina l'immagine standard
+        if (Test-Path $pngPathStandard) { $picRalph.Image = [System.Drawing.Image]::FromFile($pngPathStandard) }
     }
 })
 
 $awakeTimer.Add_Tick({
     try {
-        $wshell = New-Object -ComObject WScript.Shell
-        $wshell.SendKeys('{F15}')
+        # Invia la pressione del tasto virtuale F15
+        [System.Windows.Forms.SendKeys]::SendWait("{F15}")
     } catch {}
 })
+
 # =======================================================
 
 
@@ -843,7 +836,7 @@ foreach ($c in $cartelleApp) {
 }
 
 # --- 1. Gestione Impostazioni Audio Custom ---
-$script:audioSettingsPath = Join-Path $cartellaScript "dati\audio_settings.txt"
+$script:audioSettingsPath = Join-Path $cartellaScript "dati\audio_settings_$usr.txt"
 $script:audioGambe = Join-Path $cartellaScript "audio\Ralph-bark.wav"
 $script:audioSveglia = Join-Path $cartellaScript "audio\let-the-dogs-out.wav"
 $script:audioPomoFine = Join-Path $cartellaScript "audio\let-the-dogs-out.wav"
@@ -950,13 +943,18 @@ function Crea-RigaAudio($labelText, $txtBox, $defaultPath, $y) {
     $btn.Size = New-Object System.Drawing.Size(80, 27)
     $tabImpostazioni.Controls.Add($btn)
     
+    # --- LA SOLUZIONE E' QUI SOTTO: .GetNewClosure() ---
+    # Questo comando "congela" le variabili nella memoria, così quando 
+    # clicchi il pulsante, si ricorda esattamente quale TextBox aggiornare.
     $btn.Add_Click({
         $dialog = New-Object System.Windows.Forms.OpenFileDialog
-        $dialog.Filter = "File Audio (*.wav)|*.wav|Tutti i file (*.*)|*.*"
+        $dialog.Filter = "File Audio supportati (*.wav)|*.wav|Tutti i file (*.*)|*.*"
+        $dialog.Title = "Seleziona un file audio (SOLO formato .WAV)"
+        
         if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
             $txtBox.Text = $dialog.FileName
         }
-    })
+    }.GetNewClosure())
 }
 
 Crea-RigaAudio "Suono Sgranchisci Gambe (Timer 45m):" $script:txtGambe $script:audioGambe 30
@@ -985,7 +983,7 @@ $btnSaveAudio.Add_Click({
 })
 
 # --- 4. Setup Tab Diario Agenda ---
-$script:diarioCsvPath = Join-Path $cartellaScript "dati\diario_agenda.csv"
+$script:diarioCsvPath = Join-Path $cartellaScript "dati\diario_agenda_$usr.csv"
 $script:diarioNotes = @{}
 $script:diarioTags = @{} # Hashtable per salvare i tag
 
@@ -1021,16 +1019,31 @@ function Aggiorna-ContatoriDiario {
     $dataSel = $calDiario.SelectionStart
     $meseSel = $dataSel.Month
     $annoSel = $dataSel.Year
+    $giorniNelMese = [DateTime]::DaysInMonth($annoSel, $meseSel)
     
-    # Inizializzazione contatori esatti
-    $contatori = @{ "SWOR"=0; "FERIE"=0; "104"=0; "UFFICIO"=0; "LREM"=0; "ASS"=0 }
+    # 1. AUTO-INSERIMENTO: Se un giorno del mese è Sabato o Domenica, viene taggato come FEST
+    $salvataggioNecessario = $false
+    for ($i = 1; $i -le $giorniNelMese; $i++) {
+        $dataCiclo = New-Object DateTime($annoSel, $meseSel, $i)
+        if ($dataCiclo.DayOfWeek -eq [System.DayOfWeek]::Saturday -or $dataCiclo.DayOfWeek -eq [System.DayOfWeek]::Sunday) {
+            $dataStr = $dataCiclo.ToString("yyyy-MM-dd")
+            if (-not $script:diarioTags.ContainsKey($dataStr) -or [string]::IsNullOrWhiteSpace($script:diarioTags[$dataStr])) {
+                $script:diarioTags[$dataStr] = "FEST"
+                $salvataggioNecessario = $true
+            }
+        }
+    }
     
-    # Scansione dei tag salvati in memoria (formato yyyy-MM-dd)
+    # Salva in background solo se ha aggiunto nuovi weekend
+    if ($salvataggioNecessario) { Save-Diario } 
+
+    # 2. CONTEGGIO TOTALE
+    $contatori = @{ "SWOR"=0; "FERIE"=0; "104"=0; "UFFICIO"=0; "LREM"=0; "ASS"=0; "FEST"=0 }
+    
     foreach ($dataKey in $script:diarioTags.Keys) {
         if ($dataKey -match "^(\d{4})-(\d{2})-(\d{2})$") {
             $anno = [int]$matches[1]
             $mese = [int]$matches[2]
-            
             if ($anno -eq $annoSel -and $mese -eq $meseSel) {
                 $tagVal = $script:diarioTags[$dataKey]
                 if ($contatori.ContainsKey($tagVal)) {
@@ -1040,16 +1053,20 @@ function Aggiorna-ContatoriDiario {
         }
     }
     
-    # Aggiornamento grafico del testo del contatore
-    $lblStatsMese.Text = "Conteggio Giorni del Mese ({0:00}/$annoSel):`n`n" -f $meseSel +
-                         "SWOR: $($contatori['SWOR'])  |  UFFICIO: $($contatori['UFFICIO'])  |  LREM: $($contatori['LREM'])`n" +
-                         "FERIE: $($contatori['FERIE'])  |  104: $($contatori['104'])  |  ASS: $($contatori['ASS'])"
+    # La matematica del mese:
+    $totFestivi = $contatori["FEST"]
+    $totLavorativi = $giorniNelMese - $totFestivi
+
+    # 3. AGGIORNAMENTO GRAFICO
+    $lblStatsMese.Text = "Mese: {0:00}/{1} (Totali: {2} | Lavorativi: {3} | Festivi: {4})`n`n" -f $meseSel, $annoSel, $giorniNelMese, $totLavorativi, $totFestivi +
+                         "SWOR: $($contatori['SWOR'])  |  UFFICIO: $($contatori['UFFICIO'])  |  LREM: $($contatori['LREM'])  |  ASS: $($contatori['ASS'])`n" +
+                         "FERIE: $($contatori['FERIE'])  |  104: $($contatori['104'])  |  FEST: $($contatori['FEST'])"
 }
 
 
 # --- Creazione Interfaccia ---
 $calDiario = New-Object System.Windows.Forms.MonthCalendar
-$calDiario.Location = New-Object System.Drawing.Point(420, 20)
+$calDiario.Location = New-Object System.Drawing.Point(450, 20)
 $tabDiario.Controls.Add($calDiario)
 
 $lblDiarioTitle = New-Object System.Windows.Forms.Label
@@ -1070,7 +1087,7 @@ $cbTag = New-Object System.Windows.Forms.ComboBox
 $cbTag.Location = New-Object System.Drawing.Point(110, 48)
 $cbTag.Size = New-Object System.Drawing.Size(150, 25)
 $cbTag.DropDownStyle = [System.Windows.Forms.ComboBoxStyle]::DropDownList
-$cbTag.Items.AddRange(@("", "SWOR", "FERIE", "104", "UFFICIO", "LREM", "ASS"))
+$cbTag.Items.AddRange(@("", "SWOR", "FERIE", "104", "UFFICIO", "LREM", "ASS", "FEST"))
 $tabDiario.Controls.Add($cbTag)
 
 $chkAutosave = New-Object System.Windows.Forms.CheckBox
@@ -1127,23 +1144,26 @@ Aggiorna-ContatoriDiario
 
 # --- Eventi Aggiornati ---
 
-# 1. Evento Selezione Data
+# --- Eventi Aggiornati ---
+
+# 1. Evento Selezione Data (Aggiornato l'ordine di chiamata)
 $calDiario.Add_DateSelected({
     $dataSel = $calDiario.SelectionStart.ToString("yyyy-MM-dd")
     $lblDiarioTitle.Text = "Note dell'agenda per il: $dataSel"
     
+    # Lanciamo PRIMA l'aggiornamento, in modo che assegni gli eventuali sabati/domeniche vuoti
+    Aggiorna-ContatoriDiario
+    
     if ($script:diarioNotes.ContainsKey($dataSel)) { $txtDiarioNote.Text = $script:diarioNotes[$dataSel] } else { $txtDiarioNote.Text = "" }
     if ($script:diarioTags.ContainsKey($dataSel)) { $cbTag.SelectedItem = $script:diarioTags[$dataSel] } else { $cbTag.SelectedIndex = 0 }
-    
-    Aggiorna-ContatoriDiario
 })
 
-# 1b. NUOVO Evento Cambio Mese/Visualizzazione (Scorrimento con frecce del calendario)
+# 1b. Evento Cambio Mese/Visualizzazione
 $calDiario.Add_DateChanged({
     Aggiorna-ContatoriDiario
 })
 
-# 2. Evento Colori Tag e Autosalvataggio (Inclusione ricalcolo contatori)
+# 2. Evento Colori Tag (Incluso FEST)
 $cbTag.Add_SelectedIndexChanged({
     $sel = $cbTag.SelectedItem
     $cbTag.ForeColor = [System.Drawing.Color]::Black
@@ -1156,6 +1176,7 @@ $cbTag.Add_SelectedIndexChanged({
         "LREM" { $cbTag.BackColor = [System.Drawing.Color]::DarkGreen; $cbTag.ForeColor = [System.Drawing.Color]::White; $toolTipTag.SetToolTip($cbTag, "Lavoro da Remoto") }
         "ASS" { $cbTag.BackColor = [System.Drawing.Color]::MediumPurple; $cbTag.ForeColor = [System.Drawing.Color]::White; $txtDiarioNote.BackColor = [System.Drawing.Color]::MediumPurple; $toolTipTag.SetToolTip($cbTag, "Assemblea") }
         "104" { $cbTag.BackColor = [System.Drawing.Color]::Yellow; $txtDiarioNote.BackColor = [System.Drawing.Color]::Yellow; $toolTipTag.SetToolTip($cbTag, "Permesso Legge 104") }
+        "FEST" { $cbTag.BackColor = [System.Drawing.Color]::LightCoral; $txtDiarioNote.BackColor = [System.Drawing.Color]::LightCoral; $toolTipTag.SetToolTip($cbTag, "Giorno Festivo (Sab/Dom/Feste)") }
         default { $cbTag.BackColor = [System.Drawing.Color]::White; $toolTipTag.SetToolTip($cbTag, "Seleziona una tipologia") }
     }
 
@@ -1164,7 +1185,7 @@ $cbTag.Add_SelectedIndexChanged({
         $script:diarioTags[$dataSel] = $cbTag.SelectedItem
         $script:diarioNotes[$dataSel] = $txtDiarioNote.Text
         Save-Diario
-        Aggiorna-ContatoriDiario # <-- Aggiorna immediatamente il contatore se l'autosave modifica il tag
+        Aggiorna-ContatoriDiario
     }
 })
 
@@ -1174,7 +1195,7 @@ $btnSalvaDiario.Add_Click({
     $script:diarioNotes[$dataSel] = $txtDiarioNote.Text
     $script:diarioTags[$dataSel] = $cbTag.SelectedItem
     Save-Diario
-    Aggiorna-ContatoriDiario # <-- Ricalcola dopo il salvataggio manuale
+    Aggiorna-ContatoriDiario
     [System.Windows.Forms.MessageBox]::Show("Nota e Tag salvati per il giorno $dataSel!", "Diario Agenda", 0, 64)
 })
 
@@ -1194,8 +1215,8 @@ $script:pomoBreakTime = 5 * 60
 $script:pomoSeconds = $script:pomoFocusTime
 $script:pomoState = "IDLE"
 $pomoIconPath = Join-Path $cartellaScript "img\pomodoro.ico"
-$script:pomoCsvPath = Join-Path $cartellaScript "dati\pomodoro_tasks.csv"
-$script:templatePath = Join-Path $cartellaScript "dati\pomodoro_templates.csv"
+$script:pomoCsvPath = Join-Path $cartellaScript "dati\pomodoro_tasks_$usr.csv"
+$script:templatePath = Join-Path $cartellaScript "dati\pomodoro_templates_$usr.csv"
 $script:activePomoRow = $null
 
 $lblPomoTime = New-Object System.Windows.Forms.Label
@@ -1256,7 +1277,7 @@ $btnBreak.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
 $tabPomodoro.Controls.Add($btnBreak)
 
 $btnStopPomo = New-Object System.Windows.Forms.Button
-$btnStopPomo.Text = "🛑 Ferma (Marcio)"
+$btnStopPomo.Text = "Ferma! (Marcio)"
 $btnStopPomo.Location = New-Object System.Drawing.Point(240, 355)
 $btnStopPomo.Size = New-Object System.Drawing.Size(120, 40)
 $btnStopPomo.BackColor = [System.Drawing.Color]::IndianRed
@@ -1296,13 +1317,13 @@ $btnApplyTemplate.Size = New-Object System.Drawing.Size(85, 28)
 $tabPomodoro.Controls.Add($btnApplyTemplate)
 
 $btnSaveTemplate = New-Object System.Windows.Forms.Button
-$btnSaveTemplate.Text = "💾 Salva"
+$btnSaveTemplate.Text = "Salva"
 $btnSaveTemplate.Location = New-Object System.Drawing.Point(435, 410)
 $btnSaveTemplate.Size = New-Object System.Drawing.Size(80, 28)
 $tabPomodoro.Controls.Add($btnSaveTemplate)
 
 $btnDelTemplate = New-Object System.Windows.Forms.Button
-$btnDelTemplate.Text = "🗑 Elimina"
+$btnDelTemplate.Text = "Elimina"
 $btnDelTemplate.Location = New-Object System.Drawing.Point(520, 410)
 $btnDelTemplate.Size = New-Object System.Drawing.Size(80, 28)
 $tabPomodoro.Controls.Add($btnDelTemplate)
