@@ -1,3 +1,11 @@
+# --- User Data ---
+audio_settings_diannello.txt
+diario_agenda_diannello.csv
+pomodoro_tasks_diannello.csv
+pomodoro_templates_diannello.csv
+registro_orari_diannello.csv
+settings_diannello.txt
+
 # --- File di sistema di Windows ---
 Thumbs.db
 ehthumbs.db
@@ -24,7 +32,6 @@ $RECYCLE.BIN/
 *.tmp
 
 # --- Credenziali e Dati Sensibili ---
-# Se usi script per automazione, assicurati di NON caricare mai file di credenziali
 *credenziali*
 *credentials*
 *.pfx
