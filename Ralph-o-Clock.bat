@@ -987,83 +987,203 @@ $btnSaveAudio.Add_Click({
 # --- 4. Setup Tab Diario Agenda ---
 $script:diarioCsvPath = Join-Path $cartellaScript "dati\diario_agenda.csv"
 $script:diarioNotes = @{}
+$script:diarioTags = @{} # Hashtable per salvare i tag
 
 function Load-Diario {
     if (Test-Path $script:diarioCsvPath) {
-        $righe = Import-Csv $script:diarioCsvPath -Delimiter ";" -Encoding UTF8
+        $righe = Import-Csv -Path $script:diarioCsvPath -Delimiter ";" -Encoding UTF8
         foreach ($r in $righe) {
-            if ($null -ne $r.Data) { $script:diarioNotes[$r.Data] = $r.Note }
+            if ($null -ne $r.Data) {
+                $script:diarioNotes[$r.Data] = $r.Note
+                if ($null -ne $r.Tag) {
+                    $script:diarioTags[$r.Data] = $r.Tag
+                }
+            }
         }
     }
 }
+
 function Save-Diario {
     $lista = New-Object System.Collections.Generic.List[PSObject]
-    foreach ($key in $script:diarioNotes.Keys) {
-        $lista.Add([PSCustomObject]@{ Data = $key; Note = $script:diarioNotes[$key] })
+    $tutteLeDate = @($script:diarioNotes.Keys) + @($script:diarioTags.Keys) | Select-Object -Unique
+    
+    foreach ($key in $tutteLeDate) {
+        $lista.Add([PSCustomObject]@{
+            Data = $key
+            Note = $script:diarioNotes[$key]
+            Tag  = $script:diarioTags[$key]
+        })
     }
     $lista | Export-Csv -Path $script:diarioCsvPath -NoTypeInformation -Delimiter ";" -Encoding UTF8
 }
 
+function Aggiorna-ContatoriDiario {
+    $dataSel = $calDiario.SelectionStart
+    $meseSel = $dataSel.Month
+    $annoSel = $dataSel.Year
+    
+    # Inizializzazione contatori esatti
+    $contatori = @{ "SWOR"=0; "FERIE"=0; "104"=0; "UFFICIO"=0; "LREM"=0; "ASS"=0 }
+    
+    # Scansione dei tag salvati in memoria (formato yyyy-MM-dd)
+    foreach ($dataKey in $script:diarioTags.Keys) {
+        if ($dataKey -match "^(\d{4})-(\d{2})-(\d{2})$") {
+            $anno = [int]$matches[1]
+            $mese = [int]$matches[2]
+            
+            if ($anno -eq $annoSel -and $mese -eq $meseSel) {
+                $tagVal = $script:diarioTags[$dataKey]
+                if ($contatori.ContainsKey($tagVal)) {
+                    $contatori[$tagVal]++
+                }
+            }
+        }
+    }
+    
+    # Aggiornamento grafico del testo del contatore
+    $lblStatsMese.Text = "Conteggio Giorni del Mese ({0:00}/$annoSel):`n`n" -f $meseSel +
+                         "SWOR: $($contatori['SWOR'])  |  UFFICIO: $($contatori['UFFICIO'])  |  LREM: $($contatori['LREM'])`n" +
+                         "FERIE: $($contatori['FERIE'])  |  104: $($contatori['104'])  |  ASS: $($contatori['ASS'])"
+}
+
+
+# --- Creazione Interfaccia ---
 $calDiario = New-Object System.Windows.Forms.MonthCalendar
-$calDiario.Location = New-Object System.Drawing.Point(20, 20)
+$calDiario.Location = New-Object System.Drawing.Point(420, 20)
 $tabDiario.Controls.Add($calDiario)
 
 $lblDiarioTitle = New-Object System.Windows.Forms.Label
 $lblDiarioTitle.Text = "Note dell'agenda per il giorno selezionato:"
 $lblDiarioTitle.Font = $fontLabelBold
-$lblDiarioTitle.Location = New-Object System.Drawing.Point(260, 20)
+$lblDiarioTitle.Location = New-Object System.Drawing.Point(20, 20)
 $lblDiarioTitle.Size = New-Object System.Drawing.Size(360, 20)
 $tabDiario.Controls.Add($lblDiarioTitle)
+
+$lblTag = New-Object System.Windows.Forms.Label
+$lblTag.Text = "Tag Giornata:"
+$lblTag.Font = $fontLabel
+$lblTag.Location = New-Object System.Drawing.Point(20, 50)
+$lblTag.Size = New-Object System.Drawing.Size(90, 20)
+$tabDiario.Controls.Add($lblTag)
+
+$cbTag = New-Object System.Windows.Forms.ComboBox
+$cbTag.Location = New-Object System.Drawing.Point(110, 48)
+$cbTag.Size = New-Object System.Drawing.Size(150, 25)
+$cbTag.DropDownStyle = [System.Windows.Forms.ComboBoxStyle]::DropDownList
+$cbTag.Items.AddRange(@("", "SWOR", "FERIE", "104", "UFFICIO", "LREM", "ASS"))
+$tabDiario.Controls.Add($cbTag)
+
+$chkAutosave = New-Object System.Windows.Forms.CheckBox
+$chkAutosave.Text = "Autosalvataggio"
+$chkAutosave.Location = New-Object System.Drawing.Point(270, 48) 
+$chkAutosave.Size = New-Object System.Drawing.Size(140, 25)
+$chkAutosave.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+$chkAutosave.Checked = $true
+$tabDiario.Controls.Add($chkAutosave)
+
+$toolTipTag = New-Object System.Windows.Forms.ToolTip
+$toolTipTag.AutoPopDelay = 5000
+$toolTipTag.InitialDelay = 500
+$toolTipTag.ReshowDelay = 500
+
+# BOX CONTATORI MENSILI (Spazio Y=95, coordinata X allineata a sinistra)
+$lblStatsMese = New-Object System.Windows.Forms.Label
+$lblStatsMese.Location = New-Object System.Drawing.Point(20, 95)
+$lblStatsMese.Size = New-Object System.Drawing.Size(380, 80)
+$lblStatsMese.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+$lblStatsMese.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
+$lblStatsMese.BackColor = [System.Drawing.Color]::FromArgb(248, 250, 252) # Grigio ardesia chiarissimo, molto pulito
+$lblStatsMese.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
+$tabDiario.Controls.Add($lblStatsMese)
 
 $txtDiarioNote = New-Object System.Windows.Forms.TextBox
 $txtDiarioNote.Multiline = $true
 $txtDiarioNote.ScrollBars = [System.Windows.Forms.ScrollBars]::Vertical
-$txtDiarioNote.Location = New-Object System.Drawing.Point(260, 45)
-$txtDiarioNote.Size = New-Object System.Drawing.Size(360, 400)
-$txtDiarioNote.Font = New-Object System.Drawing.Font("Segoe UI", 10)
+$txtDiarioNote.Location = New-Object System.Drawing.Point(20, 190) # <-- ABBASSATA PER NON ANDARE SOTTO IL CALENDARIO
+$txtDiarioNote.Size = New-Object System.Drawing.Size(600, 450)     # <-- ALTEZZA COMPENSATA
+$txtDiarioNote.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Regular)
 $tabDiario.Controls.Add($txtDiarioNote)
 
-$btnSaveDiario = New-Object System.Windows.Forms.Button
-$btnSaveDiario.Text = "💾 Salva Pagina Diario"
-$btnSaveDiario.Location = New-Object System.Drawing.Point(260, 460)
-$btnSaveDiario.Size = New-Object System.Drawing.Size(180, 35)
-$btnSaveDiario.BackColor = [System.Drawing.Color]::FromArgb(37, 99, 235)
-$btnSaveDiario.ForeColor = [System.Drawing.Color]::White
-$btnSaveDiario.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
-$tabDiario.Controls.Add($btnSaveDiario)
+$btnSalvaDiario = New-Object System.Windows.Forms.Button
+$btnSalvaDiario.Text = "Salva Nota e Tag"
+$btnSalvaDiario.Location = New-Object System.Drawing.Point(20, 660)
+$btnSalvaDiario.Size = New-Object System.Drawing.Size(600, 35)
+$btnSalvaDiario.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+$btnSalvaDiario.BackColor = [System.Drawing.Color]::FromArgb(37, 99, 235)
+$btnSalvaDiario.ForeColor = [System.Drawing.Color]::White
+$btnSalvaDiario.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+$tabDiario.Controls.Add($btnSalvaDiario)
 
-$chkAutosave = New-Object System.Windows.Forms.CheckBox
-$chkAutosave.Text = "🔄 Autosalvataggio"
-$chkAutosave.Location = New-Object System.Drawing.Point(455, 465)
-$chkAutosave.Size = New-Object System.Drawing.Size(160, 25)
-$chkAutosave.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
-$chkAutosave.Checked = $false
-$tabDiario.Controls.Add($chkAutosave)
 
+# --- Caricamento Dati Iniziali e Primo Calcolo ---
 Load-Diario
 $oggiStr = [DateTime]::Now.ToString("yyyy-MM-dd")
-if ($script:diarioNotes.ContainsKey($oggiStr)) { $txtDiarioNote.Text = $script:diarioNotes[$oggiStr] }
 
+if ($script:diarioNotes.ContainsKey($oggiStr)) { $txtDiarioNote.Text = $script:diarioNotes[$oggiStr] }
+if ($script:diarioTags.ContainsKey($oggiStr)) { $cbTag.SelectedItem = $script:diarioTags[$oggiStr] } else { $cbTag.SelectedIndex = 0 }
+
+# Esegue il primo conteggio all'avvio dell'applicazione
+Aggiorna-ContatoriDiario
+
+# --- Eventi Aggiornati ---
+
+# 1. Evento Selezione Data
 $calDiario.Add_DateSelected({
     $dataSel = $calDiario.SelectionStart.ToString("yyyy-MM-dd")
-    if ($script:diarioNotes.ContainsKey($dataSel)) {
-        $txtDiarioNote.Text = $script:diarioNotes[$dataSel]
-    } else {
-        $txtDiarioNote.Text = ""
+    $lblDiarioTitle.Text = "Note dell'agenda per il: $dataSel"
+    
+    if ($script:diarioNotes.ContainsKey($dataSel)) { $txtDiarioNote.Text = $script:diarioNotes[$dataSel] } else { $txtDiarioNote.Text = "" }
+    if ($script:diarioTags.ContainsKey($dataSel)) { $cbTag.SelectedItem = $script:diarioTags[$dataSel] } else { $cbTag.SelectedIndex = 0 }
+    
+    Aggiorna-ContatoriDiario
+})
+
+# 1b. NUOVO Evento Cambio Mese/Visualizzazione (Scorrimento con frecce del calendario)
+$calDiario.Add_DateChanged({
+    Aggiorna-ContatoriDiario
+})
+
+# 2. Evento Colori Tag e Autosalvataggio (Inclusione ricalcolo contatori)
+$cbTag.Add_SelectedIndexChanged({
+    $sel = $cbTag.SelectedItem
+    $cbTag.ForeColor = [System.Drawing.Color]::Black
+    $txtDiarioNote.BackColor = [System.Drawing.Color]::White
+
+    switch ($sel) {
+        "SWOR" { $cbTag.BackColor = [System.Drawing.Color]::LightGreen; $toolTipTag.SetToolTip($cbTag, "SmartWorking") }
+        "FERIE" { $cbTag.BackColor = [System.Drawing.Color]::LightBlue; $txtDiarioNote.BackColor = [System.Drawing.Color]::LightBlue; $toolTipTag.SetToolTip($cbTag, "Ferie") }
+        "UFFICIO" { $cbTag.BackColor = [System.Drawing.Color]::LightGray; $toolTipTag.SetToolTip($cbTag, "Lavoro in presenza") }
+        "LREM" { $cbTag.BackColor = [System.Drawing.Color]::DarkGreen; $cbTag.ForeColor = [System.Drawing.Color]::White; $toolTipTag.SetToolTip($cbTag, "Lavoro da Remoto") }
+        "ASS" { $cbTag.BackColor = [System.Drawing.Color]::MediumPurple; $cbTag.ForeColor = [System.Drawing.Color]::White; $txtDiarioNote.BackColor = [System.Drawing.Color]::MediumPurple; $toolTipTag.SetToolTip($cbTag, "Assemblea") }
+        "104" { $cbTag.BackColor = [System.Drawing.Color]::Yellow; $txtDiarioNote.BackColor = [System.Drawing.Color]::Yellow; $toolTipTag.SetToolTip($cbTag, "Permesso Legge 104") }
+        default { $cbTag.BackColor = [System.Drawing.Color]::White; $toolTipTag.SetToolTip($cbTag, "Seleziona una tipologia") }
+    }
+
+    if ($chkAutosave.Checked) {
+        $dataSel = $calDiario.SelectionStart.ToString("yyyy-MM-dd") 
+        $script:diarioTags[$dataSel] = $cbTag.SelectedItem
+        $script:diarioNotes[$dataSel] = $txtDiarioNote.Text
+        Save-Diario
+        Aggiorna-ContatoriDiario # <-- Aggiorna immediatamente il contatore se l'autosave modifica il tag
     }
 })
 
-$btnSaveDiario.Add_Click({
+# 3. Evento Pulsante Salva Manuale
+$btnSalvaDiario.Add_Click({
     $dataSel = $calDiario.SelectionStart.ToString("yyyy-MM-dd")
     $script:diarioNotes[$dataSel] = $txtDiarioNote.Text
+    $script:diarioTags[$dataSel] = $cbTag.SelectedItem
     Save-Diario
-    [System.Windows.Forms.MessageBox]::Show("Nota salvata per il giorno $dataSel!", "Diario Agenda", 0, 64)
+    Aggiorna-ContatoriDiario # <-- Ricalcola dopo il salvataggio manuale
+    [System.Windows.Forms.MessageBox]::Show("Nota e Tag salvati per il giorno $dataSel!", "Diario Agenda", 0, 64)
 })
 
+# 4. Evento Autosalvataggio Testo
 $txtDiarioNote.Add_TextChanged({
     if ($chkAutosave.Checked -and $txtDiarioNote.Focused) {
         $dataSel = $calDiario.SelectionStart.ToString("yyyy-MM-dd")
         $script:diarioNotes[$dataSel] = $txtDiarioNote.Text
+        $script:diarioTags[$dataSel] = $cbTag.SelectedItem
         Save-Diario
     }
 })
