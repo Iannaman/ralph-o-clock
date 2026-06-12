@@ -111,7 +111,44 @@ if (Test-Path $pngPath) {
 $form.Controls.Add($picRalph)
 # ===========================================
 # ===========================================
+# --- LABEL DISPLAY ORARIO E COUNTDOWN ---
+$lblOrarioUscita = New-Object System.Windows.Forms.Label
+$lblOrarioUscita.Text = "L'orario di uscita = --:--"
+$lblOrarioUscita.Location = New-Object System.Drawing.Point(200, 125)
+$lblOrarioUscita.Size = New-Object System.Drawing.Size(200, 20)
+$lblOrarioUscita.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+$lblOrarioUscita.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
+$form.Controls.Add($lblOrarioUscita)
 
+$lblCountdown = New-Object System.Windows.Forms.Label
+$lblCountdown.Text = ""
+$lblCountdown.Location = New-Object System.Drawing.Point(200, 145)
+$lblCountdown.Size = New-Object System.Drawing.Size(200, 20)
+$lblCountdown.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+$lblCountdown.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
+$lblCountdown.ForeColor = [System.Drawing.Color]::FromArgb(37, 99, 235)
+$form.Controls.Add($lblCountdown)
+
+$uiTimer = New-Object System.Windows.Forms.Timer
+$uiTimer.Interval = 1000
+$uiTimer.Add_Tick({
+    try {
+        if ($null -ne $script:orarioUscitaSveglia) {
+            $oraAttuale = [DateTime]::Now.TimeOfDay
+            # Conversione sicura in TimeSpan
+            $target = [TimeSpan]::Parse($script:orarioUscitaSveglia.ToString().Split(' ')[-1])
+            $tempoMancante = $target - $oraAttuale
+            
+            if ($tempoMancante.TotalSeconds -gt 0) {
+                $lblCountdown.Text = "Mancano {0:hh\:mm\:ss} all'uscita" -f $tempoMancante
+            } else {
+                $lblCountdown.Text = "È ora di uscire! 🐕"
+                $lblCountdown.ForeColor = [System.Drawing.Color]::FromArgb(22, 101, 52)
+                $uiTimer.Stop()
+            }
+        }
+    } catch {}
+})
 
 # --- Icona Tray e Timer ---
 $sysTrayIcon = New-Object System.Windows.Forms.NotifyIcon
@@ -1199,15 +1236,32 @@ $btnSalvaDiario.Add_Click({
     [System.Windows.Forms.MessageBox]::Show("Nota e Tag salvati per il giorno $dataSel!", "Diario Agenda", 0, 64)
 })
 
-# 4. Evento Autosalvataggio Testo
+# 4. Evento Autosalvataggio Testo con timer
+$saveTimer = New-Object System.Windows.Forms.Timer
+$saveTimer.Interval = 500 # Aspetta 0,5 secondi di inattività prima di salvare
+
 $txtDiarioNote.Add_TextChanged({
     if ($chkAutosave.Checked -and $txtDiarioNote.Focused) {
-        $dataSel = $calDiario.SelectionStart.ToString("yyyy-MM-dd")
-        $script:diarioNotes[$dataSel] = $txtDiarioNote.Text
-        $script:diarioTags[$dataSel] = $cbTag.SelectedItem
-        Save-Diario
+        $saveTimer.Stop() # Resetta il timer se l'utente continua a scrivere
+        $saveTimer.Start()
     }
 })
+
+$saveTimer.Add_Tick({
+    $saveTimer.Stop()
+          try {
+            $dataSel = $calDiario.SelectionStart.ToString("yyyy-MM-dd")
+            $script:diarioNotes[$dataSel] = $txtDiarioNote.Text
+            $script:diarioTags[$dataSel] = $cbTag.SelectedItem
+            Save-Diario # Il tuo file viene salvato solo quando l'utente si ferma
+
+        } catch {
+            # Se il file è in uso, non fa nulla e non crasha
+        }
+})
+
+
+
 
 # --- 5. Setup Interfaccia Tab Pomodoro e CSV ---
 $script:pomoFocusTime = 25 * 60
@@ -1558,6 +1612,9 @@ $btnSupporto.Add_Click({
     [System.Diagnostics.Process]::Start("mailto:danilo.iannello@inps.it?subject=Richiesta%20Supporto%20-%20Tool%20Orari")
 })
 
+
+
+
 # --- Logica Pulsante Elabora Dati ---
 $btnCalcola.Add_Click({
     Correggi-FormatoOrario $txtEntrata
@@ -1760,47 +1817,67 @@ $sysTrayIcon.Add_DoubleClick({
 
 # 2. Pulsante Sveglia
 $btnSveglia.Add_Click({
-    if ($script:orarioUscitaSveglia -eq $null -or $script:orarioUscitaSveglia -eq "") {
-        [System.Windows.Forms.MessageBox]::Show("Devi prima cliccare 'Elabora Dati' per calcolare l'orario di uscita!", "Attenzione", 0, 48)
+    if ($null -eq $script:orarioUscitaSveglia) {
+        [System.Windows.Forms.MessageBox]::Show("Prima clicca 'Elabora Dati'!", "Attenzione")
         return
     }
 
-    # -- NUOVO: CONTROLLO ORARIO GIA' PASSATO --
-    $targetTime = $script:orarioUscitaSveglia
-    if ($targetTime.GetType().Name -eq "String" -or $targetTime.GetType().Name -eq "DateTime") {
-        $targetTime = [TimeSpan]::Parse($targetTime.ToString().Split(' ')[-1])
-    }
-    
-    $oraAttuale = [DateTime]::Now.TimeOfDay
-    if (($targetTime - $oraAttuale).TotalSeconds -le 0) {
-        [System.Windows.Forms.MessageBox]::Show("L'orario impostato per la sveglia � gi� passato! Inserisci un orario futuro.", "Errore Sveglia", 0, 16)
+
+# Ricalcolo logica in tempo reale
+    $target = [TimeSpan]::Parse($script:orarioUscitaSveglia.ToString().Split(' ')[-1])
+    if ($target -lt [DateTime]::Now.TimeOfDay) {
+        [System.Windows.Forms.MessageBox]::Show("L'orario " + $script:orarioUscitaSveglia + " è passato! Ricalcola.", "Errore")
         return
     }
-    # ------------------------------------------
 
-    $sysTrayIcon.Visible = $true
-    $btnStopSveglia.Enabled = $true
-    $btnStopSveglia.BackColor = [System.Drawing.Color]::FromArgb(185, 28, 28)
+# --- CHIEDI ALL'UTENTE SE MINIMIZZARE ---
+    $risposta = [System.Windows.Forms.MessageBox]::Show(
+        "Sveglia attivata per le $($target.ToString("hh\:mm")).`nVuoi minimizzare Ralph-o-Clock nel System Tray?", 
+        "Sveglia Attiva", 
+        [System.Windows.Forms.MessageBoxButtons]::YesNo, 
+        [System.Windows.Forms.MessageBoxIcon]::Question
+    )
+
+    $lblOrarioUscita.Text = "L'orario di uscita = " + $target.ToString("hh\:mm")
+    # Avvio Timer
+    $alarmTimer.Start()
+    $uiTimer.Start()
+    # Stato Bottoni
     $btnSveglia.Enabled = $false
     $btnSveglia.BackColor = [System.Drawing.Color]::DarkGray
-    
-    $form.WindowState = "Minimized"
-    $form.Hide()
-    
-    $alarmTimer.Start()
+
+    # STILE: Rosso con testo bianco per evidenziare che la sveglia è attiva
+    $btnStopSveglia.Enabled = $true
+    $btnStopSveglia.BackColor = [System.Drawing.Color]::Red
+    $btnStopSveglia.ForeColor = [System.Drawing.Color]::White
+
+    $sysTrayIcon.Visible = $true
+
+# Se l'utente preme "Yes", minimizza e nasconde
+    if ($risposta -eq [System.Windows.Forms.DialogResult]::Yes) {
+        $sysTrayIcon.Visible = $true
+        $form.WindowState = "Minimized"
+        $form.Hide()
+    }
+    # Se l'utente preme "No", il programma resta aperto e mostra il countdown, ma la sveglia è comunque attiva in background (con icona visibile) per evitare di perdere l'allarme
 })
 
 # 3. Pulsante Stop Manuale
 $btnStopSveglia.Add_Click({
     $alarmTimer.Stop()
-    $sysTrayIcon.Visible = $false
+    $uiTimer.Stop()
+    
+    $lblCountdown.Text = ""
+    # Abilito btn sveglia
+    $btnSveglia.Enabled = $true; 
+    $btnSveglia.BackColor = [System.Drawing.Color]::FromArgb(22, 101, 52) # Verde acceso
+    # STILE: Grigio scuro con testo bianco per evidenziare che la sveglia è disattivata
     $btnStopSveglia.Enabled = $false
     $btnStopSveglia.BackColor = [System.Drawing.Color]::DarkGray
-    $btnSveglia.Enabled = $true
-    $btnSveglia.BackColor = [System.Drawing.Color]::FromArgb(22, 101, 52)
-    
-    $form.Show()
-    $form.WindowState = "Normal"
+    $btnStopSveglia.ForeColor = [System.Drawing.Color]::White
+    $btnStopSveglia.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+
+    $sysTrayIcon.Visible = $false
 })
 
 # 4. Timer Sveglia
@@ -1824,19 +1901,18 @@ $alarmTimer.Add_Tick({
         else {
             # SVEGLIA!
             $alarmTimer.Stop()
-            $sysTrayIcon.Visible = $false
+            $uiTimer.Stop() # FERMA IL COUNTDOWN VISIVO
             
+            $lblCountdown.Text = "È ORA DI USCIRE!"
             $btnStopSveglia.Enabled = $false
             $btnStopSveglia.BackColor = [System.Drawing.Color]::DarkGray
+            $btnStopSveglia.ForeColor = [System.Drawing.Color]::White
+            $btnStopSveglia.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
             $btnSveglia.Enabled = $true
-            $btnSveglia.BackColor = [System.Drawing.Color]::FromArgb(22, 101, 52)
             
-            $form.Show()
-            $form.WindowState = "Normal"
-            $form.Activate()
-            
-            try { Play-AlarmSound } catch { }
-            [System.Windows.Forms.MessageBox]::Show("Orario di uscita raggiunto!", "Sveglia di Ralph", 0, 64)
+            $form.Show(); $form.WindowState = "Normal"; $form.Activate()
+            Play-AlarmSound
+            [System.Windows.Forms.MessageBox]::Show("Orario di uscita raggiunto!")
         }
     } catch {
         # Fallback invisibile: se c'� un'esitazione nel calcolo del tempo, ignora e riprova al secondo successivo
