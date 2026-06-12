@@ -15,8 +15,35 @@ Add-Type -AssemblyName System.Drawing
 $usr = $env:USERNAME # Cattura l'utente Windows attuale
 $cartellaScript = $env:BATDIR
 if ([string]::IsNullOrWhiteSpace($cartellaScript)) { $cartellaScript = [System.IO.Directory]::GetCurrentDirectory() }
-$fileImpostazioni = Join-Path $cartellaScript "dati\settings_$usr.txt"
-$fileCSV = Join-Path $cartellaScript "dati\registro_orari_$usr.csv"
+# --- CONFIGURAZIONE CARTELLA DATI PERSONALIZZATA ---
+$usr = $env:USERNAME
+$cartellaScript = $env:BATDIR
+if ([string]::IsNullOrWhiteSpace($cartellaScript)) { $cartellaScript = [System.IO.Directory]::GetCurrentDirectory() }
+
+# Leggiamo il master_config.txt per capire dove l'utente vuole i dati
+$masterConfigPath = Join-Path $cartellaScript "master_config.txt"
+if (Test-Path $masterConfigPath) {
+    $script:cartellaDati = Get-Content $masterConfigPath
+} else {
+    # Default se non è stata scelta nessuna cartella personalizzata
+    $script:cartellaDati = Join-Path $cartellaScript "dati" 
+}
+
+# Se la cartella scelta non esiste, la crea
+if (-not (Test-Path $script:cartellaDati)) {
+    New-Item -ItemType Directory -Path $script:cartellaDati | Out-Null
+}
+
+# --- ASSEGNAZIONE DINAMICA DEI FILE ---
+# Usa $script:cartellaDati invece di $cartellaScript\dati\...
+$fileImpostazioni     = Join-Path $script:cartellaDati "settings_$usr.txt"
+$settingsPath         = Join-Path $script:cartellaDati "settings_$usr.txt"
+$script:csvPath       = Join-Path $script:cartellaDati "registro_orari_$usr.csv"
+$script:pomoCsvPath   = Join-Path $script:cartellaDati "pomodoro_tasks_$usr.csv"
+$script:templatePath  = Join-Path $script:cartellaDati "pomodoro_templates_$usr.csv"
+
+# Se hai file specifici per il Diario, ricordati di aggiornarli in modo simile, ad esempio:
+# $script:diarioNotesPath = Join-Path $script:cartellaDati "diario_note_$usr.json"
 $iconPath = Join-Path $cartellaScript "img\ralph.ico"
 $imgPath = Join-Path $cartellaScript "img\ralph.png"
 $audioPath = Join-Path $cartellaScript "audio\Ralph-bark.wav"
@@ -25,6 +52,8 @@ $audioAlarmPath = Join-Path $cartellaScript "audio\let-the-dogs-out.wav"
 
 ### funziona salva memoria
 $settingsPath = Join-Path $cartellaScript "dati\settings_$usr.txt"
+### variabile per rielaborazione in tempo reale dati
+$script:datiElaborati = $false
 
 function Save-Settings {
     "$($chkStretch.Checked)|$($txtStretchMin.Text)|$($chkAutoStart.Checked)" | Out-File $settingsPath
@@ -86,14 +115,28 @@ $bgColor = [System.Drawing.Color]::FromArgb(245, 247, 250)
 $script:orarioUscitaSveglia = $null
 $script:ultimoConsuntivo = $null
 
+### Variabile per abilitare il ricalcolo automatico solo dopo il primo click
+$script:datiElaborati = $false
+
+### Il blocco di codice deve essere definito PRIMA di agganciarlo alle TextBox!
+$azioneRicalcolo = {
+    if ($script:datiElaborati) {
+        $btnCalcola.PerformClick()
+    }
+}
+
+
 # --- Finestra Principale ---
 $form = New-Object System.Windows.Forms.Form
+
 $form.Text = "Ralph-o-Clock - Registro Orari & Umore - v.3.01" 
 $form.Size = New-Object System.Drawing.Size(1100, 830)
 $form.StartPosition = "CenterScreen"
 $form.FormBorderStyle = "FixedDialog"
 $form.MaximizeBox = $false
 $form.BackColor = $bgColor
+
+
 
 # === INSERIMENTO IMMAGINE RALPH NEL FORM ===
 $picRalph = New-Object System.Windows.Forms.PictureBox
@@ -198,10 +241,12 @@ $lblEntrata.Location = New-Object System.Drawing.Point(20, 100)
 $lblEntrata.Size = New-Object System.Drawing.Size(200, 20)
 $form.Controls.Add($lblEntrata)
 
+
 $txtEntrata = New-Object System.Windows.Forms.TextBox
 $txtEntrata.Location = New-Object System.Drawing.Point(20, 120)
 $txtEntrata.Size = New-Object System.Drawing.Size(120, 25)
 $txtEntrata.Text = [DateTime]::Now.ToString("HH:mm")
+$txtEntrata.Add_Leave($azioneRicalcolo)
 $form.Controls.Add($txtEntrata)
 
 $lblOre = New-Object System.Windows.Forms.Label
@@ -215,6 +260,7 @@ $txtOre = New-Object System.Windows.Forms.TextBox
 $txtOre.Location = New-Object System.Drawing.Point(20, 170)
 $txtOre.Size = New-Object System.Drawing.Size(120, 25)
 $txtOre.Text = "07:12"
+$txtOre.Add_Leave($azioneRicalcolo)
 $form.Controls.Add($txtOre)
 
 $lblInizioPausa = New-Object System.Windows.Forms.Label
@@ -228,6 +274,7 @@ $txtInizioPausa = New-Object System.Windows.Forms.TextBox
 $txtInizioPausa.Location = New-Object System.Drawing.Point(20, 220)
 $txtInizioPausa.Size = New-Object System.Drawing.Size(120, 25)
 $txtInizioPausa.Text = "13:00"
+$txtInizioPausa.Add_Leave($azioneRicalcolo)
 $form.Controls.Add($txtInizioPausa)
 
 $lblFinePausa = New-Object System.Windows.Forms.Label
@@ -241,6 +288,7 @@ $txtFinePausa = New-Object System.Windows.Forms.TextBox
 $txtFinePausa.Location = New-Object System.Drawing.Point(20, 270)
 $txtFinePausa.Size = New-Object System.Drawing.Size(120, 25)
 $txtFinePausa.Text = "13:30"
+$txtFinePausa.Add_Leave($azioneRicalcolo)
 $form.Controls.Add($txtFinePausa)
 
 $lblUscitaEff = New-Object System.Windows.Forms.Label
@@ -254,6 +302,7 @@ $txtUscitaEff = New-Object System.Windows.Forms.TextBox
 $txtUscitaEff.Location = New-Object System.Drawing.Point(20, 320)
 $txtUscitaEff.Size = New-Object System.Drawing.Size(120, 25)
 $txtUscitaEff.Text = "" 
+$txtUscitaEff.Add_Leave($azioneRicalcolo)
 $form.Controls.Add($txtUscitaEff)
 
 # --- Tracking Umore (Soluzione ASCII/Testo) ---
@@ -953,6 +1002,8 @@ foreach ($ctrl in $controlliDestri) {
     }
 }
 
+
+
 # ---# --- 3. Setup Tab Impostazioni Audio ---
 
 # Definiamo i TextBox a livello di script per "blindarli" ed evitare che perdano la proprietà .Text
@@ -1017,6 +1068,50 @@ $btnSaveAudio.Add_Click({
     
     Save-AudioSettings
     [System.Windows.Forms.MessageBox]::Show("Impostazioni audio salvate!", "Ralph-o-Clock", 0, 64)
+})
+
+
+# =========================================================
+# IMPOSTAZIONI: SCELTA CARTELLA DI SALVATAGGIO GLOBALE
+# =========================================================
+$lblDataDir = New-Object System.Windows.Forms.Label
+$lblDataDir.Text = "Cartella salvataggio dati (Registro, Diario, Pomodoro, Impostazioni):"
+$lblDataDir.Font = $fontLabelBold
+$lblDataDir.Location = New-Object System.Drawing.Point(20, 260) # Regola la Y se si sovrappone ad altri elementi
+$lblDataDir.Size = New-Object System.Drawing.Size(400, 20)
+$tabImpostazioni.Controls.Add($lblDataDir)
+
+$txtDataDir = New-Object System.Windows.Forms.TextBox
+$txtDataDir.Location = New-Object System.Drawing.Point(20, 285) # Regola la Y 
+$txtDataDir.Size = New-Object System.Drawing.Size(320, 25)
+$txtDataDir.Text = $script:cartellaDati
+$txtDataDir.ReadOnly = $true # Impedisce modifiche manuali, obbliga l'uso del tasto Sfoglia
+$tabImpostazioni.Controls.Add($txtDataDir)
+
+$btnDataDir = New-Object System.Windows.Forms.Button
+$btnDataDir.Text = "Sfoglia..."
+$btnDataDir.Location = New-Object System.Drawing.Point(350, 284) # Regola la Y
+$btnDataDir.Size = New-Object System.Drawing.Size(80, 27)
+$tabImpostazioni.Controls.Add($btnDataDir)
+
+$btnDataDir.Add_Click({
+    $folderBrowser = New-Object System.Windows.Forms.FolderBrowserDialog
+    $folderBrowser.Description = "Seleziona la cartella principale dove salvare i dati operativi di Ralph-o-Clock"
+    $folderBrowser.SelectedPath = $script:cartellaDati
+    
+    if ($folderBrowser.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+        $txtDataDir.Text = $folderBrowser.SelectedPath
+        
+        # Salva in modo permanente il percorso nel master_config.txt accanto allo script .bat
+        $folderBrowser.SelectedPath | Out-File $masterConfigPath -Encoding UTF8
+        
+        [System.Windows.Forms.MessageBox]::Show(
+            "Cartella dati aggiornata con successo!`n`nI futuri salvataggi finiranno nel nuovo percorso. Per forzare Ralph a ricaricare i dati correnti dalla nuova cartella, riavvia l'applicazione.", 
+            "Ralph-o-Clock - Impostazioni", 
+            [System.Windows.Forms.MessageBoxButtons]::OK, 
+            [System.Windows.Forms.MessageBoxIcon]::Information
+        )
+    }
 })
 
 # --- 4. Setup Tab Diario Agenda ---
@@ -1617,6 +1712,7 @@ $btnSupporto.Add_Click({
 
 # --- Logica Pulsante Elabora Dati ---
 $btnCalcola.Add_Click({
+    $script:datiElaborati = $true
     Correggi-FormatoOrario $txtEntrata
     Correggi-FormatoOrario $txtOre
     Correggi-FormatoOrario $txtInizioPausa
@@ -1733,6 +1829,7 @@ $btnCalcola.Add_Click({
         Append-ColoredText -rtb $rtbRisultato -text "ERRORE: Controlla la correttezza dei formati inseriti." -color ([System.Drawing.Color]::Red) -bold $true
     }
 })
+
 
 $btnSalvaRegistro.Add_Click({
     if ($script:ultimoConsuntivo -ne $null) {
