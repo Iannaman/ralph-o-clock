@@ -14,10 +14,7 @@ Add-Type -AssemblyName System.Drawing
 # --- Configurazione File e Icona ---
 $usr = $env:USERNAME # Cattura l'utente Windows attuale
 $cartellaScript = $env:BATDIR
-if ([string]::IsNullOrWhiteSpace($cartellaScript)) { $cartellaScript = [System.IO.Directory]::GetCurrentDirectory() }
-# --- CONFIGURAZIONE CARTELLA DATI PERSONALIZZATA ---
-$usr = $env:USERNAME
-$cartellaScript = $env:BATDIR
+
 if ([string]::IsNullOrWhiteSpace($cartellaScript)) { $cartellaScript = [System.IO.Directory]::GetCurrentDirectory() }
 
 # Leggiamo il master_config.txt per capire dove l'utente vuole i dati
@@ -986,7 +983,7 @@ $tabDiario.BackColor = $bgColor
 $tabControl.TabPages.Add($tabDiario)
 
 $tabImpostazioni = New-Object System.Windows.Forms.TabPage
-$tabImpostazioni.Text = "Impostazioni Audio"
+$tabImpostazioni.Text = "Impostazioni"
 $tabImpostazioni.BackColor = $bgColor
 $tabControl.TabPages.Add($tabImpostazioni)
 
@@ -1077,20 +1074,20 @@ $btnSaveAudio.Add_Click({
 $lblDataDir = New-Object System.Windows.Forms.Label
 $lblDataDir.Text = "Cartella salvataggio dati (Registro, Diario, Pomodoro, Impostazioni):"
 $lblDataDir.Font = $fontLabelBold
-$lblDataDir.Location = New-Object System.Drawing.Point(20, 260) # Regola la Y se si sovrappone ad altri elementi
+$lblDataDir.Location = New-Object System.Drawing.Point(20, 460) # Regola la Y se si sovrappone ad altri elementi
 $lblDataDir.Size = New-Object System.Drawing.Size(400, 20)
 $tabImpostazioni.Controls.Add($lblDataDir)
 
 $txtDataDir = New-Object System.Windows.Forms.TextBox
-$txtDataDir.Location = New-Object System.Drawing.Point(20, 285) # Regola la Y 
-$txtDataDir.Size = New-Object System.Drawing.Size(320, 25)
+$txtDataDir.Location = New-Object System.Drawing.Point(20, 485) # Regola la Y 
+$txtDataDir.Size = New-Object System.Drawing.Size(510, 25)
 $txtDataDir.Text = $script:cartellaDati
 $txtDataDir.ReadOnly = $true # Impedisce modifiche manuali, obbliga l'uso del tasto Sfoglia
 $tabImpostazioni.Controls.Add($txtDataDir)
 
 $btnDataDir = New-Object System.Windows.Forms.Button
 $btnDataDir.Text = "Sfoglia..."
-$btnDataDir.Location = New-Object System.Drawing.Point(350, 284) # Regola la Y
+$btnDataDir.Location = New-Object System.Drawing.Point(540, 485) # Regola la Y
 $btnDataDir.Size = New-Object System.Drawing.Size(80, 27)
 $tabImpostazioni.Controls.Add($btnDataDir)
 

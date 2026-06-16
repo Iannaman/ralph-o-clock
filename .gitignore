@@ -37,3 +37,5 @@ $RECYCLE.BIN/
 *.pfx
 *.cer
 secrets.*
+master_config.txt
+Ralph-o-Clock_refactored.bat
