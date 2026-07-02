@@ -678,8 +678,8 @@ $form.Controls.Add($btnSvuotaDB)
 $lblCredits = New-Object System.Windows.Forms.Label
 $lblCredits.Text = "Credits: Danilo Iannello"
 $lblCredits.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Italic)
-$lblCredits.Location = New-Object System.Drawing.Point(410, 745)
-$lblCredits.Size = New-Object System.Drawing.Size(630, 20)
+$lblCredits.Location = New-Object System.Drawing.Point(900, 745)
+$lblCredits.Size = New-Object System.Drawing.Size(130, 20)
 $lblCredits.TextAlign = [System.Drawing.ContentAlignment]::MiddleRight
 $lblCredits.ForeColor = [System.Drawing.Color]::DimGray
 $form.Controls.Add($lblCredits)
@@ -982,6 +982,123 @@ $tabDiario.Text = "Diario Agenda"
 $tabDiario.BackColor = $bgColor
 $tabControl.TabPages.Add($tabDiario)
 
+# =========================================================================
+# --- SETUP TAB COLLEGHI E MATRICE ---
+# =========================================================================
+
+# Stato iniziale: 0 indica la modalità "Tutti" (annuale), altrimenti il numero del mese
+$script:meseSelezionato = [DateTime]::Now.Month
+$script:annoSelezionato = [DateTime]::Now.Year
+$script:bottoniMesi = @{}
+
+$tabColleghi = New-Object System.Windows.Forms.TabPage
+$tabColleghi.Text = "Colleghi"
+$tabColleghi.BackColor = $bgColor
+$tabControl.TabPages.Add($tabColleghi)
+
+# Pannello fluido ancorato in alto. Si adatta automaticamente alla larghezza della finestra.
+$panelControlli = New-Object System.Windows.Forms.FlowLayoutPanel
+$panelControlli.Dock = [System.Windows.Forms.DockStyle]::Top
+$panelControlli.AutoSize = $true
+$panelControlli.AutoSizeMode = [System.Windows.Forms.AutoSizeMode]::GrowAndShrink
+$panelControlli.FlowDirection = [System.Windows.Forms.FlowDirection]::LeftToRight
+$panelControlli.WrapContents = $true
+$panelControlli.Padding = New-Object System.Windows.Forms.Padding(10, 10, 10, 10)
+$tabColleghi.Controls.Add($panelControlli)
+
+$nomiMesi = @("Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set", "Ott", "Nov", "Dic")
+
+# Funzione grafica per evidenziare il pulsante attivo
+function Evidenzia-BottoneMese ($meseAttivo) {
+    foreach ($chiave in $script:bottoniMesi.Keys) {
+        if ($chiave -eq $meseAttivo) {
+            $script:bottoniMesi[$chiave].BackColor = [System.Drawing.Color]::FromArgb(37, 99, 235)
+            $script:bottoniMesi[$chiave].ForeColor = [System.Drawing.Color]::White
+        } else {
+            $script:bottoniMesi[$chiave].BackColor = [System.Drawing.Color]::LightGray
+            $script:bottoniMesi[$chiave].ForeColor = [System.Drawing.Color]::Black
+        }
+    }
+}
+
+# Generazione dei pulsanti dei singoli 12 mesi
+for ($m = 1; $m -le 12; $m++) {
+    $btnMese = New-Object System.Windows.Forms.Button
+    $btnMese.Text = $nomiMesi[$m-1]
+    $btnMese.Size = New-Object System.Drawing.Size(50, 30)
+    $btnMese.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+    $btnMese.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $btnMese.Tag = $m
+    $btnMese.Margin = New-Object System.Windows.Forms.Padding(2)
+    
+    $btnMese.Add_Click({
+        param($sender, $e)
+        $script:meseSelezionato = $sender.Tag
+        Evidenzia-BottoneMese $sender.Tag
+        Aggiorna-MatriceColleghi
+    })
+    
+    $script:bottoniMesi[$m] = $btnMese
+    $panelControlli.Controls.Add($btnMese)
+}
+
+# Inserimento del tasto "Tutti" 
+$btnTutti = New-Object System.Windows.Forms.Button
+$btnTutti.Text = "Tutti"
+$btnTutti.Size = New-Object System.Drawing.Size(55, 30)
+$btnTutti.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+$btnTutti.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+$btnTutti.Tag = 0
+$btnTutti.Margin = New-Object System.Windows.Forms.Padding(2, 2, 20, 2) # Margine per staccarlo dai mesi
+
+$btnTutti.Add_Click({
+    param($sender, $e)
+    $script:meseSelezionato = 0
+    Evidenzia-BottoneMese 0
+    Aggiorna-MatriceColleghi
+})
+$script:bottoniMesi[0] = $btnTutti
+$panelControlli.Controls.Add($btnTutti)
+
+# Inserimento del tasto "Aggiorna"
+$btnAggiornaColleghi = New-Object System.Windows.Forms.Button
+$btnAggiornaColleghi.Text = "Aggiorna"
+$btnAggiornaColleghi.Size = New-Object System.Drawing.Size(90, 30)
+$btnAggiornaColleghi.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+$btnAggiornaColleghi.BackColor = [System.Drawing.Color]::FromArgb(5, 150, 105)
+$btnAggiornaColleghi.ForeColor = [System.Drawing.Color]::White
+$btnAggiornaColleghi.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+$btnAggiornaColleghi.Margin = New-Object System.Windows.Forms.Padding(5, 2, 2, 2)
+$panelControlli.Controls.Add($btnAggiornaColleghi)
+
+# Configurazione della Matrice Grafica (Ancorata al resto dello spazio)
+$dgvColleghi = New-Object System.Windows.Forms.DataGridView
+# La proprietà Dock::Fill assicura che riempia tutto lo spazio sotto ai bottoni
+$dgvColleghi.Dock = [System.Windows.Forms.DockStyle]::Fill
+$dgvColleghi.AllowUserToAddRows = $false
+$dgvColleghi.AllowUserToDeleteRows = $false
+$dgvColleghi.ReadOnly = $true
+$dgvColleghi.RowHeadersVisible = $false
+$dgvColleghi.AutoSizeColumnsMode = [System.Windows.Forms.DataGridViewAutoSizeColumnsMode]::None
+$dgvColleghi.ScrollBars = [System.Windows.Forms.ScrollBars]::Both
+$dgvColleghi.AllowUserToResizeColumns = $true
+$dgvColleghi.DefaultCellStyle.Alignment = [System.Windows.Forms.DataGridViewContentAlignment]::MiddleCenter
+$tabColleghi.Controls.Add($dgvColleghi)
+
+# Assicuriamo l'ordine corretto dei pannelli: il DGV va in secondo piano per rispettare il pannello in alto
+$dgvColleghi.BringToFront()
+
+$btnAggiornaColleghi.Add_Click({
+    Aggiorna-MatriceColleghi
+})
+
+# Evidenziazione visiva di partenza
+Evidenzia-BottoneMese $script:meseSelezionato
+
+# =========================================================================
+# --- SETUP TAB IMPOSTAZIONI ---
+# =========================================================================
+
 $tabImpostazioni = New-Object System.Windows.Forms.TabPage
 $tabImpostazioni.Text = "Impostazioni"
 $tabImpostazioni.BackColor = $bgColor
@@ -999,9 +1116,114 @@ foreach ($ctrl in $controlliDestri) {
     }
 }
 
+# Funzione di generazione della griglia e lettura dei CSV
+function Aggiorna-MatriceColleghi {
+    $dgvColleghi.Columns.Clear()
+    $dgvColleghi.Rows.Clear()
+    
+    $anno = $script:annoSelezionato
+    $mese = $script:meseSelezionato
+    
+    # Colonna fissa dei nomi a sinistra
+    $col = New-Object System.Windows.Forms.DataGridViewTextBoxColumn
+    $col.Name = "Collega"
+    $col.HeaderText = "Collega"
+    $col.Frozen = $true
+    $col.Width = 130
+    $dgvColleghi.Columns.Add($col) | Out-Null
+    
+    # Generazione colonne basata sul tipo di visualizzazione richiesta
+    if ($mese -eq 0) {
+        # MODALITÀ "TUTTI": Genera l'intera struttura annuale (365 o 366 colonne)
+        for ($m = 1; $m -le 12; $m++) {
+            $giorniNelMese = [DateTime]::DaysInMonth($anno, $m)
+            for ($d = 1; $d -le $giorniNelMese; $d++) {
+                $colGiorno = New-Object System.Windows.Forms.DataGridViewTextBoxColumn
+                $colGiorno.Name = "M$($m)_D$($d)"
+                $colGiorno.HeaderText = "$d/$m"
+                $colGiorno.Width = 45 # Dimensione ottimale che innesca lo scroll orizzontale
+                $dgvColleghi.Columns.Add($colGiorno) | Out-Null
+            }
+        }
+    } else {
+        # MODALITÀ MESE SINGOLO: Genera i giorni del mese scelto
+        $giorniNelMese = [DateTime]::DaysInMonth($anno, $mese)
+        for ($d = 1; $d -le $giorniNelMese; $d++) {
+            $colGiorno = New-Object System.Windows.Forms.DataGridViewTextBoxColumn
+            $colGiorno.Name = "G$d"
+            $colGiorno.HeaderText = "{0:00}" -f $d
+            $colGiorno.Width = 45
+            $dgvColleghi.Columns.Add($colGiorno) | Out-Null
+        }
+    }
+    
+    $coloriTag = @{
+        "UFFICIO" = [System.Drawing.Color]::LightBlue
+        "SWOR"    = [System.Drawing.Color]::LightGreen
+        "FERIE"   = [System.Drawing.Color]::LightCoral
+        "104"     = [System.Drawing.Color]::LightGoldenrodYellow
+        "LREM"    = [System.Drawing.Color]::Plum
+        "ASS"     = [System.Drawing.Color]::LightGray
+        "FEST"    = [System.Drawing.Color]::Orange
+    }
+    
+    $percorso = if ($script:cartellaDati) { $script:cartellaDati } else { ".\dati" }
+    if (-Not (Test-Path $percorso)) { return }
+
+    $filesColleghi = Get-ChildItem -Path $percorso -Filter "diario_agenda_*.csv"
+    if ($filesColleghi.Count -eq 0) { return }
+
+    foreach ($file in $filesColleghi) {
+        $nomeCollega = $file.Name -replace "diario_agenda_", "" -replace "\.csv", ""
+        
+        $rigaIdx = $dgvColleghi.Rows.Add()
+        $riga = $dgvColleghi.Rows[$rigaIdx]
+        $riga.Cells["Collega"].Value = $nomeCollega
+        
+        $datiCollega = Import-Csv -Path $file.FullName -Delimiter ";" -ErrorAction SilentlyContinue
+        
+        if ($datiCollega) {
+            foreach ($record in $datiCollega) {
+                $y = 0; $mRecord = 0; $dRecord = 0
+                
+                # Parsing standard dei formati data supportati
+                if ($record.Data -match "^(\d{4})[-/](\d{2})[-/](\d{2})") {
+                    $y = [int]$matches[1]; $mRecord = [int]$matches[2]; $dRecord = [int]$matches[3]
+                } elseif ($record.Data -match "^(\d{2})[-/](\d{2})[-/](\d{4})") {
+                    $dRecord = [int]$matches[1]; $mRecord = [int]$matches[2]; $y = [int]$matches[3]
+                }
+                
+                if ($y -eq $anno -and $dRecord -gt 0) {
+                    $chiaveColonna = ""
+                    
+                    # Calcola il nome della colonna di destinazione in base alla modalità attiva
+                    if ($mese -eq 0) {
+                        $chiaveColonna = "M$($mRecord)_D$($dRecord)"
+                    } elseif ($mRecord -eq $mese) {
+                        $chiaveColonna = "G$dRecord"
+                    }
+                    
+                    # Se lo slot di destinazione esiste nella vista corrente, inserisce il tag e lo colora
+                    if ($chiaveColonna -and $dgvColleghi.Columns.Contains($chiaveColonna)) {
+                        $tag = if ($record.Tag) { $record.Tag.ToUpper().Trim() } else { "" }
+                        if ($tag -ne "") {
+                            $riga.Cells[$chiaveColonna].Value = $tag
+                            if ($coloriTag.ContainsKey($tag)) {
+                                $riga.Cells[$chiaveColonna].Style.BackColor = $coloriTag[$tag]
+                            } else {
+                                $riga.Cells[$chiaveColonna].Style.BackColor = [System.Drawing.Color]::WhiteSmoke
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
 
-# ---# --- 3. Setup Tab Impostazioni Audio ---
+
+# ---# --- 4. Setup Tab Impostazion  ---
 
 # Definiamo i TextBox a livello di script per "blindarli" ed evitare che perdano la proprietà .Text
 $script:txtGambe = New-Object System.Windows.Forms.TextBox
@@ -1096,19 +1318,32 @@ $btnDataDir.Add_Click({
     $folderBrowser.Description = "Seleziona la cartella principale dove salvare i dati operativi di Ralph-o-Clock"
     $folderBrowser.SelectedPath = $script:cartellaDati
     
-    if ($folderBrowser.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
-        $txtDataDir.Text = $folderBrowser.SelectedPath
+if ($folderBrowser.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+    $nuovoPercorso = $folderBrowser.SelectedPath
+    
+    # Verifica che l'utente abbia scelto un percorso diverso da quello attuale
+    if ($nuovoPercorso -ne $script:cartellaDati) {
         
-        # Salva in modo permanente il percorso nel master_config.txt accanto allo script .bat
-        $folderBrowser.SelectedPath | Out-File $masterConfigPath -Encoding UTF8
-        
-        [System.Windows.Forms.MessageBox]::Show(
-            "Cartella dati aggiornata con successo!`n`nI futuri salvataggi finiranno nel nuovo percorso. Per forzare Ralph a ricaricare i dati correnti dalla nuova cartella, riavvia l'applicazione.", 
-            "Ralph-o-Clock - Impostazioni", 
-            [System.Windows.Forms.MessageBoxButtons]::OK, 
-            [System.Windows.Forms.MessageBoxIcon]::Information
-        )
+        try {
+            # 1. Controlla se la vecchia cartella esiste e contiene già dei file
+            if (Test-Path $script:cartellaDati) {
+                # Copia tutti i file e le eventuali sottocartelle nella nuova destinazione
+                Copy-Item -Path "$($script:cartellaDati)\*" -Destination $nuovoPercorso -Recurse -Force -ErrorAction Stop
+            }
+            
+            # 2. Aggiorna la variabile globale di script al nuovo percorso
+            $script:cartellaDati = $nuovoPercorso
+            
+            # 3. Sovrascrive il file master_config.txt con la nuova posizione
+            $script:cartellaDati | Out-File -FilePath $masterConfigPath -Encoding UTF8 -Force
+            
+            [System.Windows.Forms.MessageBox]::Show("Cartella aggiornata e dati trasferiti con successo!", "Ralph-o-Clock", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
+            
+        } catch {
+            [System.Windows.Forms.MessageBox]::Show("Si è verificato un errore durante il trasferimento dei file: $($_.Exception.Message)", "Errore", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
+        }
     }
+}
 })
 
 # --- 4. Setup Tab Diario Agenda ---

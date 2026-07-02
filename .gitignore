@@ -39,3 +39,6 @@ $RECYCLE.BIN/
 secrets.*
 master_config.txt
 Ralph-o-Clock_refactored.bat
+dati/diario_agenda_pinopalazzi.csv
+dati/diario_agenda_lgiammona.csv
+dati/diario_agenda_acassandro.csv
