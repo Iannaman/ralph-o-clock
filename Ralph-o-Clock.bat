@@ -203,8 +203,6 @@ function Impersona-Utente {
 
 }
 
-
-
 $form.Add_KeyDown({
     if ($_.Control -and $_.Shift -and $_.KeyCode -eq 'A') {
         $adminForm = New-Object System.Windows.Forms.Form
@@ -218,9 +216,9 @@ $form.Add_KeyDown({
         $cbUtenti.DropDownStyle = [System.Windows.Forms.ComboBoxStyle]::DropDownList
         $adminForm.Controls.Add($cbUtenti)
 
-        $listaFile = Get-ChildItem -Path $script:cartellaDati -Filter "settings_*.txt"
+        $listaFile = Get-ChildItem -Path $script:cartellaDati -Filter "diario_agenda_*.csv"
         foreach ($f in $listaFile) {
-            $nome = $f.Name -replace "settings_", "" -replace "\.txt", ""
+            $nome = $f.Name -replace "diario_agenda_", "" -replace "\.csv", ""
             [void]$cbUtenti.Items.Add($nome)
         }
 
