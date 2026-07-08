@@ -146,20 +146,24 @@ $lblAdminMode.Location = New-Object System.Drawing.Point(300, 2)
 $lblAdminMode.Visible = $false
 $form.Controls.Add($lblAdminMode)
 
-# QUESTA È LA FUNZIONE NUOVA DA INSERIRE
+
 function Impersona-Utente {
     param([string]$NuovoUtente)
     
-    # Sovrascrive la variabile utente a tutti i livelli (Risolve il bug del salvataggio)
+    # Sovrascrive la variabile utente a tutti i livelli
     $global:usr = $NuovoUtente
     $script:usr = $NuovoUtente
     $usr = $NuovoUtente
 
-    # Riassegna tutti i percorsi ai file dell'utente target
+    # 1. Riassegna TUTTI i percorsi ai file dell'utente target
     $global:settingsPath         = Join-Path $script:cartellaDati "settings_$NuovoUtente.txt"
     $script:csvPath              = Join-Path $script:cartellaDati "registro_orari_$NuovoUtente.csv"
     $script:pomoCsvPath          = Join-Path $script:cartellaDati "pomodoro_tasks_$NuovoUtente.csv"
     $script:templatePath         = Join-Path $script:cartellaDati "pomodoro_templates_$NuovoUtente.csv"
+    
+    # FIX: Aggiorniamo anche il percorso del Diario e delle impostazioni Audio!
+    $script:diarioCsvPath        = Join-Path $script:cartellaDati "diario_agenda_$NuovoUtente.csv"
+    $script:audioSettingsPath    = Join-Path $script:cartellaDati "audio_settings_$NuovoUtente.txt"
 
     $lblAdminMode.Text = "ADMIN Mode, impersonificando $NuovoUtente"
     $lblAdminMode.Visible = $true
@@ -169,14 +173,37 @@ function Impersona-Utente {
     $txtUscitaEff.Text = ""
     $txtNote.Text = ""
 
-    # --- PUNTO CRITICO ---
-    # Qui sotto devi richiamare le funzioni del TUO codice originale che ricaricano i dati.
-    # Ad esempio, se usi una funzione "Carica-Diario" e "Load-Settings", scrivile qui:
+    # 2. FIX: Pulisce la memoria per evitare che i dati di due utenti si mescolino
+    $script:diarioNotes.Clear()
+    $script:diarioTags.Clear()
+    $dgvTasks.Rows.Clear()
+   
+    # Congelo evento di salvataggio per evitare che le modifiche
+    $statoAutosave = $chkAutosave.Checked
+    $chkAutosave.Checked = $false
+
+    # 3. FIX: Richiama le funzioni per leggere i nuovi file e aggiornare la UI
+    Load-Settings
+    Load-AudioSettings
+    Carica-CSV
+    Load-Diario
+    Load-PomoTasks
     
-    # Load-Settings
-    # Carica-Diario
+    # Aggiorna visivamente le statistiche del Diario
+    Aggiorna-ContatoriDiario 
+    
+    # Aggiorna il testo e i tag del Diario per il giorno attualmente selezionato sul calendario
+    $dataSel = $calDiario.SelectionStart.ToString("yyyy-MM-dd")
+    if ($script:diarioNotes.ContainsKey($dataSel)) { $txtDiarioNote.Text = $script:diarioNotes[$dataSel] } else { $txtDiarioNote.Text = "" }
+    if ($script:diarioTags.ContainsKey($dataSel)) { $cbTag.SelectedItem = $script:diarioTags[$dataSel] } else { $cbTag.SelectedIndex = 0 }
+    # --- RIABILITA L'AUTOSAVE ---
+    $chkAutosave.Checked = $statoAutosave
+    # 6. Forza il refresh della Tab Colleghi
+    Aggiorna-MatriceColleghi
 
 }
+
+
 
 $form.Add_KeyDown({
     if ($_.Control -and $_.Shift -and $_.KeyCode -eq 'A') {
@@ -1425,7 +1452,7 @@ if ($folderBrowser.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
 })
 
 # --- 4. Setup Tab Diario Agenda ---
-$script:diarioCsvPath = Join-Path $cartellaScript "dati\diario_agenda_$usr.csv"
+$script:diarioCsvPath = Join-Path $script:cartellaDati "diario_agenda_$usr.csv"
 $script:diarioNotes = @{}
 $script:diarioTags = @{} # Hashtable per salvare i tag
 
