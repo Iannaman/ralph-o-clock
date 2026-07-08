@@ -44,20 +44,42 @@ $audioAlarmPath = Join-Path $cartellaScript "audio\let-the-dogs-out.wav"
 $settingsPath = Join-Path $cartellaScript "dati\settings_$usr.txt"
 $script:datiElaborati = $false
 
-# --- Variabile di stato per l'anno ---
-$script:ultimoAnnoCalcolato = 0
-
 function Save-Settings {
-    "$($chkStretch.Checked)|$($txtStretchMin.Text)|$($chkAutoStart.Checked)" | Out-File $settingsPath
+    "$($chkStretch.Checked)|$($txtStretchMin.Text)|$($chkAutoStart.Checked)|$($chkNascondiUmore.Checked)" | Out-File $settingsPath
 }
 
 function Load-Settings {
     if (Test-Path $settingsPath) {
         $data = (Get-Content $settingsPath).Split('|')
-        $chkStretch.Checked = [bool]::Parse($data[0])
-        $txtStretchMin.Text = $data[1]
-        $chkAutoStart.Checked = [bool]::Parse($data[2])
+        if ($data.Length -ge 1) { $chkStretch.Checked = [bool]::Parse($data[0]) }
+        if ($data.Length -ge 2) { $txtStretchMin.Text = $data[1] }
+        if ($data.Length -ge 3) { $chkAutoStart.Checked = [bool]::Parse($data[2]) }
+        if ($data.Length -ge 4) { $chkNascondiUmore.Checked = [bool]::Parse($data[3]) } else { $chkNascondiUmore.Checked = $false }
     }
+}
+
+function Applica-VisibilitaUmore {
+    $vis = -not $chkNascondiUmore.Checked
+    
+    $lblUmore.Visible = $vis
+    $btnInfoUmore.Visible = $vis
+    $cbUmore.Visible = $vis
+    
+    if ($vis) {
+        $lblNote.Location = New-Object System.Drawing.Point(20, 410)
+        $txtNote.Location = New-Object System.Drawing.Point(20, 430)
+        $txtNote.Size = New-Object System.Drawing.Size(360, 50)
+    } else {
+        $lblNote.Location = New-Object System.Drawing.Point(20, 355)
+        $txtNote.Location = New-Object System.Drawing.Point(20, 375)
+        $txtNote.Size = New-Object System.Drawing.Size(360, 105)
+    }
+    
+    if ($null -ne $dgv.Columns["Umore"]) {
+        $dgv.Columns["Umore"].Visible = $vis
+    }
+    
+    $lblStatUmore.Visible = $vis
 }
 
 function Play-StartupSound {
@@ -117,7 +139,7 @@ $form.MaximizeBox = $false
 $form.BackColor = $bgColor
 $form.KeyPreview = $true
 
-# --- INIZIO BLOCCO ADMIN MODE (Modificato) ---
+# --- INIZIO BLOCCO ADMIN MODE ---
 $btnExitImpersonation = New-Object System.Windows.Forms.Button
 $btnExitImpersonation.Text = "Esci Impersonificazione"
 $btnExitImpersonation.Location = New-Object System.Drawing.Point(275, 125)
@@ -166,14 +188,16 @@ function Impersona-Utente {
     $statoAutosave = $chkAutosave.Checked
     $chkAutosave.Checked = $false
 
+    # Rimuove il filtro di eventuali mesi selezionati prima del caricamento per non sfalsare le statistiche
+    $dt.DefaultView.RowFilter = ""
+
     Load-Settings
+    Applica-VisibilitaUmore
     Load-AudioSettings
     Carica-CSV
     Load-Diario
     Load-PomoTasks
     
-    # Forza il ricalcolo annuale riavviando la variabile
-    $script:ultimoAnnoCalcolato = 0
     Aggiorna-ContatoriDiario 
     
     $dataSel = $calDiario.SelectionStart.ToString("yyyy-MM-dd")
@@ -1307,6 +1331,19 @@ $btnDataDir.Add_Click({
     }
 })
 
+# --- NUOVA OPZIONE: NASCONDI UMORE ---
+$chkNascondiUmore = New-Object System.Windows.Forms.CheckBox
+$chkNascondiUmore.Text = "Nascondi Monitoraggio Umore (Aumenta spazio Note)"
+$chkNascondiUmore.Font = $fontLabelBold
+$chkNascondiUmore.Location = New-Object System.Drawing.Point(20, 530)
+$chkNascondiUmore.Size = New-Object System.Drawing.Size(400, 25)
+$tabImpostazioni.Controls.Add($chkNascondiUmore)
+
+$chkNascondiUmore.Add_CheckedChanged({
+    Applica-VisibilitaUmore
+    Save-Settings
+})
+
 # --- Setup Tab Diario Agenda e Statistiche Dinamiche ---
 $script:diarioCsvPath = Join-Path $script:cartellaDati "diario_agenda_$usr.csv"
 $script:diarioNotes = @{}
@@ -1369,7 +1406,6 @@ function Format-ColoredStats {
         }
     }
     
-    # Riporta il selettore alla fine per evitare selezioni visibili residue
     $rtb.SelectionStart = $rtb.TextLength
     $rtb.SelectionLength = 0
 }
@@ -1395,15 +1431,24 @@ function Aggiorna-ContatoriDiario {
     if ($salvataggioNecessario) { Save-Diario } 
 
     $contatori = @{ "SWOR"=0; "FERIE"=0; "exFest"=0;  "104"=0; "UFFICIO"=0; "LREM"=0; "ASS"=0; "FEST"=0 }
+    $contAnno = @{ "SWOR"=0; "FERIE"=0; "exFest"=0;  "104"=0; "UFFICIO"=0; "LREM"=0; "ASS"=0; "FEST"=0 }
     
+    # Ricalcolo dinamico completo di tutti i record per mantenere Mese e Anno perfettamente sincronizzati
     foreach ($dataKey in $script:diarioTags.Keys) {
         if ($dataKey -match "^(\d{4})-(\d{2})-(\d{2})$") {
             $anno = [int]$matches[1]
             $mese = [int]$matches[2]
-            if ($anno -eq $annoSel -and $mese -eq $meseSel) {
-                $tagVal = $script:diarioTags[$dataKey]
-                if ($contatori.ContainsKey($tagVal)) {
-                    $contatori[$tagVal]++
+            
+            $tagVal = $script:diarioTags[$dataKey]
+            
+            if ($anno -eq $annoSel) {
+                if ($contAnno.ContainsKey($tagVal)) {
+                    $contAnno[$tagVal]++
+                }
+                if ($mese -eq $meseSel) {
+                    if ($contatori.ContainsKey($tagVal)) {
+                        $contatori[$tagVal]++
+                    }
                 }
             }
         }
@@ -1417,27 +1462,10 @@ function Aggiorna-ContatoriDiario {
                  "FERIE: $($contatori['FERIE'])  | exFest: $($contatori['exFest']) | 104: $($contatori['104'])  |  FEST: $($contatori['FEST'])"
     Format-ColoredStats -rtb $rtbStatsMese -text $testoMese
 
-    # Calcolo Annuale solo al cambio di anno
-    if ($annoSel -ne $script:ultimoAnnoCalcolato) {
-        $script:ultimoAnnoCalcolato = $annoSel
-        $contAnno = @{ "SWOR"=0; "FERIE"=0; "exFest"=0;  "104"=0; "UFFICIO"=0; "LREM"=0; "ASS"=0; "FEST"=0 }
-        
-        foreach ($dataKey in $script:diarioTags.Keys) {
-            if ($dataKey -match "^(\d{4})-(\d{2})-(\d{2})$") {
-                if ([int]$matches[1] -eq $annoSel) {
-                    $tagVal = $script:diarioTags[$dataKey]
-                    if ($contAnno.ContainsKey($tagVal)) {
-                        $contAnno[$tagVal]++
-                    }
-                }
-            }
-        }
-
-        $testoAnno = "Anno: {0}`n`n" -f $annoSel +
-                     "SWOR: $($contAnno['SWOR'])  |  UFFICIO: $($contAnno['UFFICIO'])  |  LREM: $($contAnno['LREM'])  |  ASS: $($contAnno['ASS'])`n" +
-                     "FERIE: $($contAnno['FERIE'])  | exFest: $($contAnno['exFest']) | 104: $($contAnno['104'])  |  FEST: $($contAnno['FEST'])"
-        Format-ColoredStats -rtb $rtbStatsAnno -text $testoAnno
-    }
+    $testoAnno = "Anno: {0}`n`n" -f $annoSel +
+                 "SWOR: $($contAnno['SWOR'])  |  UFFICIO: $($contAnno['UFFICIO'])  |  LREM: $($contAnno['LREM'])  |  ASS: $($contAnno['ASS'])`n" +
+                 "FERIE: $($contAnno['FERIE'])  | exFest: $($contAnno['exFest']) | 104: $($contAnno['104'])  |  FEST: $($contAnno['FEST'])"
+    Format-ColoredStats -rtb $rtbStatsAnno -text $testoAnno
 }
 
 $calDiario = New-Object System.Windows.Forms.MonthCalendar
@@ -1478,7 +1506,6 @@ $toolTipTag.AutoPopDelay = 5000
 $toolTipTag.InitialDelay = 500
 $toolTipTag.ReshowDelay = 500
 
-# NUOVA TAB COLLECTION (MENSILE E ANNUALE)
 $tabStatsCollection = New-Object System.Windows.Forms.TabControl
 $tabStatsCollection.Location = New-Object System.Drawing.Point(20, 80)
 $tabStatsCollection.Size = New-Object System.Drawing.Size(420, 105)
@@ -2229,6 +2256,10 @@ $form.Add_Resize({
     }
 })
 
+
+# --- CARICAMENTO FINALE DELLE IMPOSTAZIONI ---
+Load-Settings
+Applica-VisibilitaUmore
 Play-StartupSound
 Carica-CSV
 
