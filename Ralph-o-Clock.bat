@@ -142,7 +142,7 @@ $form.KeyPreview = $true
 # --- INIZIO BLOCCO ADMIN MODE ---
 $btnExitImpersonation = New-Object System.Windows.Forms.Button
 $btnExitImpersonation.Text = "Esci Impersonificazione"
-$btnExitImpersonation.Location = New-Object System.Drawing.Point(275, 125)
+$btnExitImpersonation.Location = New-Object System.Drawing.Point(250, 125)
 $btnExitImpersonation.Size = New-Object System.Drawing.Size(150, 25)
 $btnExitImpersonation.BackColor = [System.Drawing.Color]::IndianRed
 $btnExitImpersonation.ForeColor = [System.Drawing.Color]::White
@@ -155,8 +155,14 @@ $btnExitImpersonation.Add_Click({
     Impersona-Utente -NuovoUtente $env:USERNAME
 })
 
+# Dichiarazione dummy del timer per poterlo stoppare prima che venga istanziato realmente nel codice
+$saveTimer = New-Object System.Windows.Forms.Timer
+
 function Impersona-Utente {
     param([string]$NuovoUtente)
+    
+    # Blocco istantaneo dell'autosalvataggio per non accavallare dati
+    $saveTimer.Stop()
     
     $global:usr = $NuovoUtente
     $script:usr = $NuovoUtente
@@ -181,6 +187,7 @@ function Impersona-Utente {
     $txtUscitaEff.Text = ""
     $txtNote.Text = ""
 
+    # PULIZIA MEMORIA DIZIONARI MANTENENDO LA REFERENCE ORIGINALE (.Clear al posto di @{})
     $script:diarioNotes.Clear()
     $script:diarioTags.Clear()
     $dgvTasks.Rows.Clear()
@@ -188,7 +195,6 @@ function Impersona-Utente {
     $statoAutosave = $chkAutosave.Checked
     $chkAutosave.Checked = $false
 
-    # Rimuove il filtro di eventuali mesi selezionati prima del caricamento per non sfalsare le statistiche
     $dt.DefaultView.RowFilter = ""
 
     Load-Settings
@@ -198,11 +204,22 @@ function Impersona-Utente {
     Load-Diario
     Load-PomoTasks
     
-    Aggiorna-ContatoriDiario 
-    
+    # Aggiornamento UI sicuro con sistema anti-spazi (Trim)
     $dataSel = $calDiario.SelectionStart.ToString("yyyy-MM-dd")
     if ($script:diarioNotes.ContainsKey($dataSel)) { $txtDiarioNote.Text = $script:diarioNotes[$dataSel] } else { $txtDiarioNote.Text = "" }
-    if ($script:diarioTags.ContainsKey($dataSel)) { $cbTag.SelectedItem = $script:diarioTags[$dataSel] } else { $cbTag.SelectedIndex = 0 }
+    
+    if ($script:diarioTags.ContainsKey($dataSel)) { 
+        $val = $script:diarioTags[$dataSel].Trim()
+        if ($cbTag.Items.Contains($val)) {
+            $cbTag.SelectedItem = $val
+        } else {
+            $cbTag.SelectedIndex = 0
+        }
+    } else { 
+        $cbTag.SelectedIndex = 0 
+    }
+    
+    Aggiorna-ContatoriDiario 
     
     $chkAutosave.Checked = $statoAutosave
     Aggiorna-MatriceColleghi
@@ -1167,14 +1184,15 @@ function Aggiorna-MatriceColleghi {
     }
     
     $coloriTag = @{
-        "UFFICIO" = [System.Drawing.Color]::LightGray
-        "SWOR"    = [System.Drawing.Color]::LightGreen
-        "FERIE"   = [System.Drawing.Color]::LightCoral
-	    "exFest"  = [System.Drawing.Color]::DarkSalmon
-        "104"     = [System.Drawing.Color]::LightGoldenrodYellow
+        "UFFICIO" = [System.Drawing.Color]::AliceBlue
+        "SWOR"    = [System.Drawing.Color]::AquaMarine
+        "FERIE"   = [System.Drawing.Color]::Plum
+	    "exFest"  = [System.Drawing.Color]::Tomato
+        "104"     = [System.Drawing.Color]::Khaki
         "LREM"    = [System.Drawing.Color]::LightSeaGreen
-        "ASS"     = [System.Drawing.Color]::MediumPurple
-        "FEST"    = [System.Drawing.Color]::LightCoral
+        "ASS"     = [System.Drawing.Color]::PowderBlue
+        "FEST"    = [System.Drawing.Color]::IndianRed
+        "MAL"     = [System.Drawing.Color]::PaleVioletRed
     }
     
     $percorso = if ($script:cartellaDati) { $script:cartellaDati } else { ".\dati" }
@@ -1356,7 +1374,7 @@ function Load-Diario {
             if ($null -ne $r.Data) {
                 $script:diarioNotes[$r.Data] = $r.Note
                 if ($null -ne $r.Tag) {
-                    $script:diarioTags[$r.Data] = $r.Tag
+                    $script:diarioTags[$r.Data] = $r.Tag.Trim()
                 }
             }
         }
@@ -1371,7 +1389,7 @@ function Save-Diario {
         $lista.Add([PSCustomObject]@{
             Data = $key
             Note = $script:diarioNotes[$key]
-            Tag  = $script:diarioTags[$key]
+            Tag  = $script:diarioTags[$key].Trim()
         })
     }
     $lista | Export-Csv -Path $script:diarioCsvPath -NoTypeInformation -Delimiter ";" -Encoding UTF8
@@ -1384,14 +1402,15 @@ function Format-ColoredStats {
     $rtb.AppendText($text)
 
     $coloriTag = @{
-        "SWOR"    = [System.Drawing.Color]::Green
-        "FERIE"   = [System.Drawing.Color]::LightCoral
-        "exFest"  = [System.Drawing.Color]::DarkSalmon
-        "UFFICIO" = [System.Drawing.Color]::Gray
+        "UFFICIO" = [System.Drawing.Color]::SkyBlue
+        "SWOR"    = [System.Drawing.Color]::AquaMarine
+        "FERIE"   = [System.Drawing.Color]::Plum
+	    "exFest"  = [System.Drawing.Color]::Tomato
+        "104"     = [System.Drawing.Color]::Khaki
         "LREM"    = [System.Drawing.Color]::LightSeaGreen
-        "ASS"     = [System.Drawing.Color]::MediumPurple
-        "104"     = [System.Drawing.Color]::DarkGoldenrod
-        "FEST"    = [System.Drawing.Color]::Red
+        "ASS"     = [System.Drawing.Color]::PowderBlue
+        "FEST"    = [System.Drawing.Color]::IndianRed
+        "MAL"     = [System.Drawing.Color]::PaleVioletRed
     }
 
     foreach ($key in $coloriTag.Keys) {
@@ -1430,24 +1449,26 @@ function Aggiorna-ContatoriDiario {
     
     if ($salvataggioNecessario) { Save-Diario } 
 
-    $contatori = @{ "SWOR"=0; "FERIE"=0; "exFest"=0;  "104"=0; "UFFICIO"=0; "LREM"=0; "ASS"=0; "FEST"=0 }
-    $contAnno = @{ "SWOR"=0; "FERIE"=0; "exFest"=0;  "104"=0; "UFFICIO"=0; "LREM"=0; "ASS"=0; "FEST"=0 }
+    $contatori = @{ "SWOR"=0; "FERIE"=0; "exFest"=0;  "104"=0; "UFFICIO"=0; "LREM"=0; "ASS"=0; "FEST"=0; "MAL"=0 }
+    $contAnno = @{ "SWOR"=0; "FERIE"=0; "exFest"=0;  "104"=0; "UFFICIO"=0; "LREM"=0; "ASS"=0; "FEST"=0; "MAL"=0 }
     
-    # Ricalcolo dinamico completo di tutti i record per mantenere Mese e Anno perfettamente sincronizzati
-    foreach ($dataKey in $script:diarioTags.Keys) {
+    foreach ($dataKey in @($script:diarioTags.Keys)) {
         if ($dataKey -match "^(\d{4})-(\d{2})-(\d{2})$") {
             $anno = [int]$matches[1]
             $mese = [int]$matches[2]
             
-            $tagVal = $script:diarioTags[$dataKey]
-            
-            if ($anno -eq $annoSel) {
-                if ($contAnno.ContainsKey($tagVal)) {
-                    $contAnno[$tagVal]++
-                }
-                if ($mese -eq $meseSel) {
-                    if ($contatori.ContainsKey($tagVal)) {
-                        $contatori[$tagVal]++
+            # Controllo anti-corruzione per chiavi vuote
+            if ($null -ne $script:diarioTags[$dataKey]) {
+                $tagVal = $script:diarioTags[$dataKey].ToString().Trim().ToUpper()
+                
+                if ($anno -eq $annoSel) {
+                    if ($contAnno.ContainsKey($tagVal)) {
+                        $contAnno[$tagVal]++
+                    }
+                    if ($mese -eq $meseSel) {
+                        if ($contatori.ContainsKey($tagVal)) {
+                            $contatori[$tagVal]++
+                        }
                     }
                 }
             }
@@ -1459,12 +1480,12 @@ function Aggiorna-ContatoriDiario {
 
     $testoMese = "Mese: {0:00}/{1} (Totali: {2} | Lavorativi: {3} | Festivi: {4})`n`n" -f $meseSel, $annoSel, $giorniNelMese, $totLavorativi, $totFestivi +
                  "SWOR: $($contatori['SWOR'])  |  UFFICIO: $($contatori['UFFICIO'])  |  LREM: $($contatori['LREM'])  |  ASS: $($contatori['ASS'])`n" +
-                 "FERIE: $($contatori['FERIE'])  | exFest: $($contatori['exFest']) | 104: $($contatori['104'])  |  FEST: $($contatori['FEST'])"
+                 "FERIE: $($contatori['FERIE'])  | exFest: $($contatori['exFest']) | 104: $($contatori['104'])  |  FEST: $($contatori['FEST']) | MAL: $($contatori['MAL'])"
     Format-ColoredStats -rtb $rtbStatsMese -text $testoMese
 
     $testoAnno = "Anno: {0}`n`n" -f $annoSel +
                  "SWOR: $($contAnno['SWOR'])  |  UFFICIO: $($contAnno['UFFICIO'])  |  LREM: $($contAnno['LREM'])  |  ASS: $($contAnno['ASS'])`n" +
-                 "FERIE: $($contAnno['FERIE'])  | exFest: $($contAnno['exFest']) | 104: $($contAnno['104'])  |  FEST: $($contAnno['FEST'])"
+                 "FERIE: $($contAnno['FERIE'])  | exFest: $($contAnno['exFest']) | 104: $($contAnno['104'])  |  FEST: $($contAnno['FEST']) | MAL: $($contAnno['MAL'])"
     Format-ColoredStats -rtb $rtbStatsAnno -text $testoAnno
 }
 
@@ -1490,7 +1511,7 @@ $cbTag = New-Object System.Windows.Forms.ComboBox
 $cbTag.Location = New-Object System.Drawing.Point(110, 48)
 $cbTag.Size = New-Object System.Drawing.Size(150, 25)
 $cbTag.DropDownStyle = [System.Windows.Forms.ComboBoxStyle]::DropDownList
-$cbTag.Items.AddRange(@("", "SWOR", "FERIE","exFest", "104", "UFFICIO", "LREM", "ASS", "FEST"))
+$cbTag.Items.AddRange(@("", "SWOR", "FERIE","exFest", "104", "UFFICIO", "LREM", "ASS", "FEST", "MAL"))
 $tabDiario.Controls.Add($cbTag)
 
 $chkAutosave = New-Object System.Windows.Forms.CheckBox
@@ -1560,22 +1581,50 @@ Load-Diario
 $oggiStr = [DateTime]::Now.ToString("yyyy-MM-dd")
 
 if ($script:diarioNotes.ContainsKey($oggiStr)) { $txtDiarioNote.Text = $script:diarioNotes[$oggiStr] }
-if ($script:diarioTags.ContainsKey($oggiStr)) { $cbTag.SelectedItem = $script:diarioTags[$oggiStr] } else { $cbTag.SelectedIndex = 0 }
+
+if ($script:diarioTags.ContainsKey($oggiStr)) { 
+    $val = $script:diarioTags[$oggiStr].Trim()
+    if ($cbTag.Items.Contains($val)) {
+        $cbTag.SelectedItem = $val
+    } else {
+        $cbTag.SelectedIndex = 0
+    }
+} else { $cbTag.SelectedIndex = 0 }
 
 Aggiorna-ContatoriDiario
 
-$calDiario.Add_DateSelected({
+# --- NAVIGAZIONE UNIVERSALE DEL CALENDARIO ---
+# Questo singolo evento intercetta i click sui giorni, i salti di mese e l'utilizzo delle frecce.
+$calDiario.Add_DateChanged({
     $dataSel = $calDiario.SelectionStart.ToString("yyyy-MM-dd")
     $lblDiarioTitle.Text = "Note dell'agenda per il: $dataSel"
     
+    # Sospendo l'autosalvataggio per non sovrascrivere file accidentalmente durante l'aggiornamento grafico
+    $wasAutosave = $chkAutosave.Checked
+    $chkAutosave.Checked = $false
+    
+    if ($script:diarioNotes.ContainsKey($dataSel)) { 
+        $txtDiarioNote.Text = $script:diarioNotes[$dataSel] 
+    } else { 
+        $txtDiarioNote.Text = "" 
+    }
+    
+    if ($script:diarioTags.ContainsKey($dataSel)) { 
+        $val = $script:diarioTags[$dataSel].Trim()
+        if ($cbTag.Items.Contains($val)) {
+            $cbTag.SelectedItem = $val
+        } else {
+            $cbTag.SelectedIndex = 0
+        }
+    } else { 
+        $cbTag.SelectedIndex = 0 
+    }
+    
+    # Aggiorna il bilancio annuale/mensile
     Aggiorna-ContatoriDiario
     
-    if ($script:diarioNotes.ContainsKey($dataSel)) { $txtDiarioNote.Text = $script:diarioNotes[$dataSel] } else { $txtDiarioNote.Text = "" }
-    if ($script:diarioTags.ContainsKey($dataSel)) { $cbTag.SelectedItem = $script:diarioTags[$dataSel] } else { $cbTag.SelectedIndex = 0 }
-})
-
-$calDiario.Add_DateChanged({
-    Aggiorna-ContatoriDiario
+    # Riabilito la protezione dell'autosalvataggio originale
+    $chkAutosave.Checked = $wasAutosave
 })
 
 $cbTag.Add_SelectedIndexChanged({
@@ -1584,14 +1633,15 @@ $cbTag.Add_SelectedIndexChanged({
     $txtDiarioNote.BackColor = [System.Drawing.Color]::White
 
     switch ($sel) {
-        "SWOR" { $cbTag.BackColor = [System.Drawing.Color]::LightGreen; $toolTipTag.SetToolTip($cbTag, "SmartWorking") }
-        "FERIE" { $cbTag.BackColor = [System.Drawing.Color]::LightBlue; $txtDiarioNote.BackColor = [System.Drawing.Color]::LightBlue; $toolTipTag.SetToolTip($cbTag, "Ferie") }
-	    "exFest" { $cbTag.BackColor = [System.Drawing.Color]::DarkSalmon; $txtDiarioNote.BackColor = [System.Drawing.Color]::DarkSalmon; $toolTipTag.SetToolTip($cbTag, "exFest") }
-        "UFFICIO" { $cbTag.BackColor = [System.Drawing.Color]::LightGray; $toolTipTag.SetToolTip($cbTag, "Lavoro in presenza") }
+        "SWOR" { $cbTag.BackColor = [System.Drawing.Color]::AquaMarine; $toolTipTag.SetToolTip($cbTag, "SmartWorking") }
+        "FERIE" { $cbTag.BackColor = [System.Drawing.Color]::Plum; $txtDiarioNote.BackColor = [System.Drawing.Color]::Plum; $toolTipTag.SetToolTip($cbTag, "Ferie") }
+	    "exFest" { $cbTag.BackColor = [System.Drawing.Color]::Tomato; $txtDiarioNote.BackColor = [System.Drawing.Color]::Tomato; $toolTipTag.SetToolTip($cbTag, "exFest") }
+        "UFFICIO" { $cbTag.BackColor = [System.Drawing.Color]::SkyBlue; $toolTipTag.SetToolTip($cbTag, "Lavoro in presenza") }
         "LREM" { $cbTag.BackColor = [System.Drawing.Color]::LightSeaGreen; $cbTag.ForeColor = [System.Drawing.Color]::White; $toolTipTag.SetToolTip($cbTag, "Lavoro da Remoto") }
-        "ASS" { $cbTag.BackColor = [System.Drawing.Color]::MediumPurple; $cbTag.ForeColor = [System.Drawing.Color]::White; $txtDiarioNote.BackColor = [System.Drawing.Color]::MediumPurple; $toolTipTag.SetToolTip($cbTag, "Assemblea") }
+        "ASS" { $cbTag.BackColor = [System.Drawing.Color]::PowderBlue; $cbTag.ForeColor = [System.Drawing.Color]::White; $txtDiarioNote.BackColor = [System.Drawing.Color]::PowderBlue; $toolTipTag.SetToolTip($cbTag, "Assemblea") }
         "104" { $cbTag.BackColor = [System.Drawing.Color]::Yellow; $txtDiarioNote.BackColor = [System.Drawing.Color]::Yellow; $toolTipTag.SetToolTip($cbTag, "Permesso Legge 104") }
         "FEST" { $cbTag.BackColor = [System.Drawing.Color]::LightCoral; $txtDiarioNote.BackColor = [System.Drawing.Color]::LightCoral; $toolTipTag.SetToolTip($cbTag, "Giorno Festivo (Sab/Dom/Feste)") }
+        "MAL" { $cbTag.BackColor = [System.Drawing.Color]::PaleVioletRed; $txtDiarioNote.BackColor = [System.Drawing.Color]::PaleVioletRed; $toolTipTag.SetToolTip($cbTag, "Malattia") }
         default { $cbTag.BackColor = [System.Drawing.Color]::White; $toolTipTag.SetToolTip($cbTag, "Seleziona una tipologia") }
     }
 
@@ -1613,10 +1663,8 @@ $btnSalvaDiario.Add_Click({
     [System.Windows.Forms.MessageBox]::Show("Nota e Tag salvati per il giorno $dataSel!", "Diario Agenda", 0, 64)
 })
 
-$saveTimer = New-Object System.Windows.Forms.Timer
-$saveTimer.Interval = 500 
-
 $txtDiarioNote.Add_TextChanged({
+    # Sicurezza: fa scattare il timer SOLO se l'utente sta fisicamente digitando nel form, non quando il programma aggiorna la casella automaticamente.
     if ($chkAutosave.Checked -and $txtDiarioNote.Focused) {
         $saveTimer.Stop() 
         $saveTimer.Start()
