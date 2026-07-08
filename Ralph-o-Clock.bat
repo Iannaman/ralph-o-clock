@@ -109,6 +109,8 @@ $fontLabelBold = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.F
 $fontTitle = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
 $bgColor = [System.Drawing.Color]::FromArgb(245, 247, 250)
 
+
+
 $script:orarioUscitaSveglia = $null
 $script:ultimoConsuntivo = $null
 
@@ -132,8 +134,83 @@ $form.StartPosition = "CenterScreen"
 $form.FormBorderStyle = "FixedDialog"
 $form.MaximizeBox = $false
 $form.BackColor = $bgColor
+# --- INIZIO BLOCCO ADMIN MODE ---
+$form.KeyPreview = $true
 
+$lblAdminMode = New-Object System.Windows.Forms.Label
+$lblAdminMode.Text = "ADMIN Mode, impersonificando NOMEUTENTE"
+$lblAdminMode.ForeColor = [System.Drawing.Color]::Red
+$lblAdminMode.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
+$lblAdminMode.AutoSize = $true
+$lblAdminMode.Location = New-Object System.Drawing.Point(300, 2)
+$lblAdminMode.Visible = $false
+$form.Controls.Add($lblAdminMode)
 
+# QUESTA È LA FUNZIONE NUOVA DA INSERIRE
+function Impersona-Utente {
+    param([string]$NuovoUtente)
+    
+    # Sovrascrive la variabile utente a tutti i livelli (Risolve il bug del salvataggio)
+    $global:usr = $NuovoUtente
+    $script:usr = $NuovoUtente
+    $usr = $NuovoUtente
+
+    # Riassegna tutti i percorsi ai file dell'utente target
+    $global:settingsPath         = Join-Path $script:cartellaDati "settings_$NuovoUtente.txt"
+    $script:csvPath              = Join-Path $script:cartellaDati "registro_orari_$NuovoUtente.csv"
+    $script:pomoCsvPath          = Join-Path $script:cartellaDati "pomodoro_tasks_$NuovoUtente.csv"
+    $script:templatePath         = Join-Path $script:cartellaDati "pomodoro_templates_$NuovoUtente.csv"
+
+    $lblAdminMode.Text = "ADMIN Mode, impersonificando $NuovoUtente"
+    $lblAdminMode.Visible = $true
+
+    # Azzera i campi testo principali
+    $txtEntrata.Text = ""
+    $txtUscitaEff.Text = ""
+    $txtNote.Text = ""
+
+    # --- PUNTO CRITICO ---
+    # Qui sotto devi richiamare le funzioni del TUO codice originale che ricaricano i dati.
+    # Ad esempio, se usi una funzione "Carica-Diario" e "Load-Settings", scrivile qui:
+    
+    # Load-Settings
+    # Carica-Diario
+
+}
+
+$form.Add_KeyDown({
+    if ($_.Control -and $_.Shift -and $_.KeyCode -eq 'A') {
+        $adminForm = New-Object System.Windows.Forms.Form
+        $adminForm.Text = "Menu Admin"
+        $adminForm.Size = New-Object System.Drawing.Size(300, 160)
+        $adminForm.StartPosition = "CenterParent"
+        
+        $cbUtenti = New-Object System.Windows.Forms.ComboBox
+        $cbUtenti.Location = New-Object System.Drawing.Point(15, 35)
+        $cbUtenti.Size = New-Object System.Drawing.Size(250, 25)
+        $cbUtenti.DropDownStyle = [System.Windows.Forms.ComboBoxStyle]::DropDownList
+        $adminForm.Controls.Add($cbUtenti)
+
+        $listaFile = Get-ChildItem -Path $script:cartellaDati -Filter "settings_*.txt"
+        foreach ($f in $listaFile) {
+            $nome = $f.Name -replace "settings_", "" -replace "\.txt", ""
+            [void]$cbUtenti.Items.Add($nome)
+        }
+
+        $btnApplica = New-Object System.Windows.Forms.Button
+        $btnApplica.Text = "Impersona"
+        $btnApplica.Location = New-Object System.Drawing.Point(15, 75)
+        $btnApplica.Add_Click({
+            if ($cbUtenti.SelectedItem) {
+                Impersona-Utente -NuovoUtente $cbUtenti.SelectedItem
+                $adminForm.Close()
+            }
+        })
+        $adminForm.Controls.Add($btnApplica)
+        $adminForm.ShowDialog()
+    }
+})
+# --- FINE BLOCCO ADMIN MODE ---
 
 # === INSERIMENTO IMMAGINE RALPH NEL FORM ===
 $picRalph = New-Object System.Windows.Forms.PictureBox
@@ -472,7 +549,7 @@ $btnInfoAwake.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
 $form.Controls.Add($btnInfoAwake)
 
 $btnInfoAwake.Add_Click({
-    $msg = " Modalita' Cane da Guardia `n`nQuando questa opzione e' attiva, Ralph fa credere al PC che tu sia presente.`n`nRisultato:`n- Schermo sempre acceso.`n- Pallino di Microsoft Teams sempre VERDE (Disponibile)!"
+    $msg = " Modalita' Cane da Guardia `n`nQuando questa opzione e' attiva, Ralph fa credere al PC che tu sia presente e cosi non va in standby.`n`nRisultato:`n- Schermo sempre acceso.`n- (Disponibile)"
     [System.Windows.Forms.MessageBox]::Show($msg, "Cane da Guardia", 0, 64)
 })
 
@@ -1161,8 +1238,9 @@ function Aggiorna-MatriceColleghi {
         "UFFICIO" = [System.Drawing.Color]::LightBlue
         "SWOR"    = [System.Drawing.Color]::LightGreen
         "FERIE"   = [System.Drawing.Color]::LightCoral
+	    "exFest"  = [System.Drawing.Color]::DarkSalmon
         "104"     = [System.Drawing.Color]::LightGoldenrodYellow
-        "LREM"    = [System.Drawing.Color]::Plum
+        "LREM"    = [System.Drawing.Color]::LightSeaGreen
         "ASS"     = [System.Drawing.Color]::LightGray
         "FEST"    = [System.Drawing.Color]::Orange
     }
@@ -1402,7 +1480,7 @@ function Aggiorna-ContatoriDiario {
     if ($salvataggioNecessario) { Save-Diario } 
 
     # 2. CONTEGGIO TOTALE
-    $contatori = @{ "SWOR"=0; "FERIE"=0; "104"=0; "UFFICIO"=0; "LREM"=0; "ASS"=0; "FEST"=0 }
+    $contatori = @{ "SWOR"=0; "FERIE"=0; "exFest"=0;  "104"=0; "UFFICIO"=0; "LREM"=0; "ASS"=0; "FEST"=0 }
     
     foreach ($dataKey in $script:diarioTags.Keys) {
         if ($dataKey -match "^(\d{4})-(\d{2})-(\d{2})$") {
@@ -1424,7 +1502,7 @@ function Aggiorna-ContatoriDiario {
     # 3. AGGIORNAMENTO GRAFICO
     $lblStatsMese.Text = "Mese: {0:00}/{1} (Totali: {2} | Lavorativi: {3} | Festivi: {4})`n`n" -f $meseSel, $annoSel, $giorniNelMese, $totLavorativi, $totFestivi +
                          "SWOR: $($contatori['SWOR'])  |  UFFICIO: $($contatori['UFFICIO'])  |  LREM: $($contatori['LREM'])  |  ASS: $($contatori['ASS'])`n" +
-                         "FERIE: $($contatori['FERIE'])  |  104: $($contatori['104'])  |  FEST: $($contatori['FEST'])"
+                         "FERIE: $($contatori['FERIE'])  | exFest: $($contatori['exFest']) | 104: $($contatori['104'])  |  FEST: $($contatori['FEST'])"
 }
 
 
@@ -1451,7 +1529,7 @@ $cbTag = New-Object System.Windows.Forms.ComboBox
 $cbTag.Location = New-Object System.Drawing.Point(110, 48)
 $cbTag.Size = New-Object System.Drawing.Size(150, 25)
 $cbTag.DropDownStyle = [System.Windows.Forms.ComboBoxStyle]::DropDownList
-$cbTag.Items.AddRange(@("", "SWOR", "FERIE", "104", "UFFICIO", "LREM", "ASS", "FEST"))
+$cbTag.Items.AddRange(@("", "SWOR", "FERIE","exFest", "104", "UFFICIO", "LREM", "ASS", "FEST"))
 $tabDiario.Controls.Add($cbTag)
 
 $chkAutosave = New-Object System.Windows.Forms.CheckBox
@@ -1536,8 +1614,9 @@ $cbTag.Add_SelectedIndexChanged({
     switch ($sel) {
         "SWOR" { $cbTag.BackColor = [System.Drawing.Color]::LightGreen; $toolTipTag.SetToolTip($cbTag, "SmartWorking") }
         "FERIE" { $cbTag.BackColor = [System.Drawing.Color]::LightBlue; $txtDiarioNote.BackColor = [System.Drawing.Color]::LightBlue; $toolTipTag.SetToolTip($cbTag, "Ferie") }
+	    "exFest" { $cbTag.BackColor = [System.Drawing.Color]::DarkSalmon; $txtDiarioNote.BackColor = [System.Drawing.Color]::DarkSalmon; $toolTipTag.SetToolTip($cbTag, "exFest") }
         "UFFICIO" { $cbTag.BackColor = [System.Drawing.Color]::LightGray; $toolTipTag.SetToolTip($cbTag, "Lavoro in presenza") }
-        "LREM" { $cbTag.BackColor = [System.Drawing.Color]::DarkGreen; $cbTag.ForeColor = [System.Drawing.Color]::White; $toolTipTag.SetToolTip($cbTag, "Lavoro da Remoto") }
+        "LREM" { $cbTag.BackColor = [System.Drawing.Color]::LightSeaGreen; $cbTag.ForeColor = [System.Drawing.Color]::White; $toolTipTag.SetToolTip($cbTag, "Lavoro da Remoto") }
         "ASS" { $cbTag.BackColor = [System.Drawing.Color]::MediumPurple; $cbTag.ForeColor = [System.Drawing.Color]::White; $txtDiarioNote.BackColor = [System.Drawing.Color]::MediumPurple; $toolTipTag.SetToolTip($cbTag, "Assemblea") }
         "104" { $cbTag.BackColor = [System.Drawing.Color]::Yellow; $txtDiarioNote.BackColor = [System.Drawing.Color]::Yellow; $toolTipTag.SetToolTip($cbTag, "Permesso Legge 104") }
         "FEST" { $cbTag.BackColor = [System.Drawing.Color]::LightCoral; $txtDiarioNote.BackColor = [System.Drawing.Color]::LightCoral; $toolTipTag.SetToolTip($cbTag, "Giorno Festivo (Sab/Dom/Feste)") }
