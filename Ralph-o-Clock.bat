@@ -1619,7 +1619,7 @@ $calDiario.Add_DateChanged({
     } else { 
         $cbTag.SelectedIndex = 0 
     }
-    
+  
     # Aggiorna il bilancio annuale/mensile
     Aggiorna-ContatoriDiario
     
@@ -1651,6 +1651,7 @@ $cbTag.Add_SelectedIndexChanged({
         $script:diarioNotes[$dataSel] = $txtDiarioNote.Text
         Save-Diario
         Aggiorna-ContatoriDiario
+        Aggiorna-MatriceColleghi
     }
 })
 
@@ -2310,6 +2311,8 @@ Load-Settings
 Applica-VisibilitaUmore
 Play-StartupSound
 Carica-CSV
+Aggiorna-MatriceColleghi
+
 
 [System.Windows.Forms.Application]::Run($form)
 
