@@ -204,8 +204,12 @@ function Impersona-Utente {
     Load-Diario
     Load-PomoTasks
     
-    # Aggiornamento UI sicuro con sistema anti-spazi (Trim)
     $dataSel = $calDiario.SelectionStart.ToString("yyyy-MM-dd")
+    
+    # 1. PRIMA calcoliamo i contatori ed eventuale auto-popolamento dei giorni FEST nel CSV
+    Aggiorna-ContatoriDiario 
+    
+    # 2. POI aggiorniamo l'interfaccia utente leggendo i dati definitivi e allineati
     if ($script:diarioNotes.ContainsKey($dataSel)) { $txtDiarioNote.Text = $script:diarioNotes[$dataSel] } else { $txtDiarioNote.Text = "" }
     
     if ($script:diarioTags.ContainsKey($dataSel)) { 
@@ -219,12 +223,9 @@ function Impersona-Utente {
         $cbTag.SelectedIndex = 0 
     }
     
-    Aggiorna-ContatoriDiario 
-    
     $chkAutosave.Checked = $statoAutosave
     Aggiorna-MatriceColleghi
 }
-
 $form.Add_KeyDown({
     if ($_.Control -and $_.Shift -and $_.KeyCode -eq 'A') {
         $adminForm = New-Object System.Windows.Forms.Form
@@ -1371,10 +1372,18 @@ function Load-Diario {
     if (Test-Path $script:diarioCsvPath) {
         $righe = Import-Csv -Path $script:diarioCsvPath -Delimiter ";" -Encoding UTF8
         foreach ($r in $righe) {
-            if ($null -ne $r.Data) {
-                $script:diarioNotes[$r.Data] = $r.Note
+            if (-not [string]::IsNullOrWhiteSpace($r.Data)) {
+                
+                # --- FIX: Normalizzazione universale della data in yyyy-MM-dd ---
+                $chiaveData = $r.Data.Trim()
+                if ($chiaveData -match "^(\d{2})[-/](\d{2})[-/](\d{4})$") {
+                    # Se è gg/mm/aaaa o gg-mm-aaaa, la convertiamo al formato del calendario
+                    $chiaveData = "$($matches[3])-$($matches[2])-$($matches[1])"
+                }
+
+                $script:diarioNotes[$chiaveData] = $r.Note
                 if ($null -ne $r.Tag) {
-                    $script:diarioTags[$r.Data] = $r.Tag.Trim()
+                    $script:diarioTags[$chiaveData] = $r.Tag.Trim()
                 }
             }
         }
@@ -1389,7 +1398,7 @@ function Save-Diario {
         $lista.Add([PSCustomObject]@{
             Data = $key
             Note = $script:diarioNotes[$key]
-            Tag  = $script:diarioTags[$key].Trim()
+            Tag  = if ($null -ne $script:diarioTags[$key]) { $script:diarioTags[$key].Trim() } else { "" }
         })
     }
     $lista | Export-Csv -Path $script:diarioCsvPath -NoTypeInformation -Delimiter ";" -Encoding UTF8
@@ -1436,8 +1445,13 @@ function Aggiorna-ContatoriDiario {
     $giorniNelMese = [DateTime]::DaysInMonth($annoSel, $meseSel)
     
     $salvataggioNecessario = $false
-    for ($i = 1; $i -le $giorniNelMese; $i++) {
-        $dataCiclo = New-Object DateTime($annoSel, $meseSel, $i)
+    
+    # --- FIX: Calcolo FEST per l'INTERO ANNO per avere statistiche annuali corrette ---
+    $giorniNellAnno = if ([DateTime]::IsLeapYear($annoSel)) { 366 } else { 365 }
+    $inizioAnno = New-Object DateTime($annoSel, 1, 1)
+
+    for ($i = 0; $i -lt $giorniNellAnno; $i++) {
+        $dataCiclo = $inizioAnno.AddDays($i)
         if ($dataCiclo.DayOfWeek -eq [System.DayOfWeek]::Saturday -or $dataCiclo.DayOfWeek -eq [System.DayOfWeek]::Sunday) {
             $dataStr = $dataCiclo.ToString("yyyy-MM-dd")
             if (-not $script:diarioTags.ContainsKey($dataStr) -or [string]::IsNullOrWhiteSpace($script:diarioTags[$dataStr])) {
@@ -1453,11 +1467,11 @@ function Aggiorna-ContatoriDiario {
     $contAnno = @{ "SWOR"=0; "FERIE"=0; "exFest"=0;  "104"=0; "UFFICIO"=0; "LREM"=0; "ASS"=0; "FEST"=0; "MAL"=0 }
     
     foreach ($dataKey in @($script:diarioTags.Keys)) {
+        # Questa regex ora funzionerà sempre su tutti i dati vecchi grazie alla normalizzazione in Load-Diario!
         if ($dataKey -match "^(\d{4})-(\d{2})-(\d{2})$") {
             $anno = [int]$matches[1]
             $mese = [int]$matches[2]
             
-            # Controllo anti-corruzione per chiavi vuote
             if ($null -ne $script:diarioTags[$dataKey]) {
                 $tagVal = $script:diarioTags[$dataKey].ToString().Trim().ToUpper()
                 
