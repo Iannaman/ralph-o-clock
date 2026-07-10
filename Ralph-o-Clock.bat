@@ -1014,34 +1014,41 @@ function Save-AudioSettings {
     @($script:audioGambe, $script:audioSveglia, $script:audioPomoFine, $script:audioPomoPausa) | Set-Content -Path $script:audioSettingsPath -Encoding UTF8
 }
 Load-AudioSettings
-
+#TAB CONTROL
 $tabControl = New-Object System.Windows.Forms.TabControl
 $tabControl.Location = New-Object System.Drawing.Point(400, 15)
 $tabControl.Size = New-Object System.Drawing.Size(660, 760)
 
-$tabRegistro = New-Object System.Windows.Forms.TabPage
-$tabRegistro.Text = "Registro Storico"
-$tabRegistro.BackColor = $bgColor
-$tabControl.TabPages.Add($tabRegistro)
-
-$tabPomodoro = New-Object System.Windows.Forms.TabPage
-$tabPomodoro.Text = "Pomodoro Timer"
-$tabPomodoro.BackColor = $bgColor
-$tabControl.TabPages.Add($tabPomodoro)
-
+#TAB DIARIO AGENDA
 $tabDiario = New-Object System.Windows.Forms.TabPage
 $tabDiario.Text = "Diario Agenda"
 $tabDiario.BackColor = $bgColor
 $tabControl.TabPages.Add($tabDiario)
+#TAB REGISTRO STORICO
+$tabRegistro = New-Object System.Windows.Forms.TabPage
+$tabRegistro.Text = "Registro Storico"
+$tabRegistro.BackColor = $bgColor
+$tabControl.TabPages.Add($tabRegistro)
+#TAB POMODORO TIMER
+$tabPomodoro = New-Object System.Windows.Forms.TabPage
+$tabPomodoro.Text = "Pomodoro Timer"
+$tabPomodoro.BackColor = $bgColor
+$tabControl.TabPages.Add($tabPomodoro)
+#TAB COLLEGHI
+$tabColleghi = New-Object System.Windows.Forms.TabPage
+$tabColleghi.Text = "Colleghi"
+$tabColleghi.BackColor = $bgColor
+$tabControl.TabPages.Add($tabColleghi)
+#TAB IMPOSTAZIONI
+$tabImpostazioni = New-Object System.Windows.Forms.TabPage
+$tabImpostazioni.Text = "Impostazioni"
+$tabImpostazioni.BackColor = $bgColor
+$tabControl.TabPages.Add($tabImpostazioni)
 
 $script:meseSelezionato = [DateTime]::Now.Month
 $script:annoSelezionato = [DateTime]::Now.Year
 $script:bottoniMesi = @{}
 
-$tabColleghi = New-Object System.Windows.Forms.TabPage
-$tabColleghi.Text = "Colleghi"
-$tabColleghi.BackColor = $bgColor
-$tabControl.TabPages.Add($tabColleghi)
 
 $panelControlli = New-Object System.Windows.Forms.FlowLayoutPanel
 $panelControlli.Dock = [System.Windows.Forms.DockStyle]::Top
@@ -1132,10 +1139,6 @@ $btnAggiornaColleghi.Add_Click({
 
 Evidenzia-BottoneMese $script:meseSelezionato
 
-$tabImpostazioni = New-Object System.Windows.Forms.TabPage
-$tabImpostazioni.Text = "Impostazioni"
-$tabImpostazioni.BackColor = $bgColor
-$tabControl.TabPages.Add($tabImpostazioni)
 
 $form.Controls.Add($tabControl)
 
