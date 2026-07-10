@@ -1215,8 +1215,8 @@ $dgvColleghi.AllowUserToResizeColumns = $true
 $dgvColleghi.DefaultCellStyle.Alignment = [System.Windows.Forms.DataGridViewContentAlignment]::MiddleCenter
 $tabColleghi.Controls.Add($dgvColleghi)
 $dgvColleghi.BringToFront()
-
-
+# --- NUOVO: Permette di colorare le intestazioni per evidenziare "Oggi" ---
+$dgvColleghi.EnableHeadersVisualStyles = $false
 
 $tabColleghi.Controls.Add($dgvColleghi)
 $dgvColleghi.BringToFront()
@@ -1339,6 +1339,45 @@ function Aggiorna-MatriceColleghi {
                     }
                 }
             }
+        }
+    }
+    # --- EVIDENZIAZIONE E CENTRATURA GIORNO CORRENTE ---
+    $oggi = [DateTime]::Now
+    
+    # Eseguiamo solo se l'anno selezionato è quello in corso
+    if ($anno -eq $oggi.Year) {
+        $nomeColonnaOggi = ""
+        
+        # Determiniamo come si chiama la colonna di oggi a seconda se siamo in "Tutti" o nel singolo mese
+        if ($mese -eq 0) {
+            $nomeColonnaOggi = "M$($oggi.Month)_D$($oggi.Day)"
+        } elseif ($mese -eq $oggi.Month) {
+            $nomeColonnaOggi = "G$($oggi.Day)"
+        }
+
+        # Se la colonna di oggi esiste ed è visibile nella matrice attuale
+        if ($nomeColonnaOggi -ne "" -and $dgvColleghi.Columns.Contains($nomeColonnaOggi)) {
+            $colOggi = $dgvColleghi.Columns[$nomeColonnaOggi]
+            
+            # 1. Evidenzia l'intestazione di Giallo Oro
+            $colOggi.HeaderCell.Style.BackColor = [System.Drawing.Color]::Gold
+            $colOggi.HeaderCell.Style.ForeColor = [System.Drawing.Color]::Black
+            $colOggi.HeaderCell.Style.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+            
+            # 2. Calcola lo scorrimento per centrarla
+            # Sapendo che ogni quadratino è largo circa 45px, arretriamo l'indice visibile di circa 6 colonne (mezzo schermo)
+            $offsetCentratura = 6 
+            $targetIndex = $colOggi.Index - $offsetCentratura
+            
+            # Assicuriamoci di non "sforare" tornando troppo indietro (l'indice 0 è la colonna fissa coi Nomi)
+            if ($targetIndex -lt 1) { 
+                $targetIndex = 1 
+            }
+            
+            # Eseguiamo lo scroll automatico!
+            try {
+                $dgvColleghi.FirstDisplayedScrollingColumnIndex = $targetIndex
+            } catch { }
         }
     }
 }
