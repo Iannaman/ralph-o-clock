@@ -229,10 +229,19 @@ function Impersona-Utente {
 $form.Add_KeyDown({
     if ($_.Control -and $_.Shift -and $_.KeyCode -eq 'A') {
         $adminForm = New-Object System.Windows.Forms.Form
-        $adminForm.Text = "Menu Admin"
-        $adminForm.Size = New-Object System.Drawing.Size(300, 160)
+        $adminForm.Text = "Menu Segreto Admin"
+        $adminForm.Size = New-Object System.Drawing.Size(300, 240)
         $adminForm.StartPosition = "CenterParent"
+        $adminForm.FormBorderStyle = "FixedToolWindow"
         
+        # --- SEZIONE 1: IMPERSONA UTENTE ---
+        $lblImpersona = New-Object System.Windows.Forms.Label
+        $lblImpersona.Text = "1. Impersona Utente:"
+        $lblImpersona.Font = $fontLabelBold
+        $lblImpersona.Location = New-Object System.Drawing.Point(15, 10)
+        $lblImpersona.Size = New-Object System.Drawing.Size(250, 20)
+        $adminForm.Controls.Add($lblImpersona)
+
         $cbUtenti = New-Object System.Windows.Forms.ComboBox
         $cbUtenti.Location = New-Object System.Drawing.Point(15, 35)
         $cbUtenti.Size = New-Object System.Drawing.Size(250, 25)
@@ -246,8 +255,8 @@ $form.Add_KeyDown({
         }
 
         $btnApplica = New-Object System.Windows.Forms.Button
-        $btnApplica.Text = "Impersona"
-        $btnApplica.Location = New-Object System.Drawing.Point(15, 75)
+        $btnApplica.Text = "Cambia Utente"
+        $btnApplica.Location = New-Object System.Drawing.Point(15, 65)
         $btnApplica.Add_Click({
             if ($cbUtenti.SelectedItem) {
                 Impersona-Utente -NuovoUtente $cbUtenti.SelectedItem
@@ -255,10 +264,49 @@ $form.Add_KeyDown({
             }
         })
         $adminForm.Controls.Add($btnApplica)
+        
+        # --- SEZIONE 2: SBLOCCO IMPOSTAZIONI TAG ---
+        $lblAdmin = New-Object System.Windows.Forms.Label
+        $lblAdmin.Text = "2. Configurazione Sistema:"
+        $lblAdmin.Font = $fontLabelBold
+        $lblAdmin.Location = New-Object System.Drawing.Point(15, 115)
+        $lblAdmin.Size = New-Object System.Drawing.Size(250, 20)
+        $adminForm.Controls.Add($lblAdmin)
+
+        $btnToggleAdmin = New-Object System.Windows.Forms.Button
+        if ($script:isAdminMode) {
+            $btnToggleAdmin.Text = "Blocca Modifica TAG"
+            $btnToggleAdmin.BackColor = [System.Drawing.Color]::IndianRed
+        } else {
+            $btnToggleAdmin.Text = "Sblocca Modifica TAG"
+            $btnToggleAdmin.BackColor = [System.Drawing.Color]::FromArgb(71, 85, 105)
+        }
+        $btnToggleAdmin.ForeColor = [System.Drawing.Color]::White
+        $btnToggleAdmin.Location = New-Object System.Drawing.Point(15, 140)
+        $btnToggleAdmin.Size = New-Object System.Drawing.Size(250, 35)
+        
+        $btnToggleAdmin.Add_Click({
+            # Inverte lo stato di Admin Mode
+            $script:isAdminMode = -not $script:isAdminMode
+            
+            # Abilita/Disabilita la UI nel tab Impostazioni
+            $dgvTags.Enabled = $script:isAdminMode
+            $btnSalvaTag.Enabled = $script:isAdminMode
+            
+            if ($script:isAdminMode) {
+                [System.Windows.Forms.MessageBox]::Show("Admin Mode ATTIVATA.`nOra puoi modificare la tabella dei TAG nel tab 'Impostazioni'.", "Admin Mode Sbloccata", 0, 64)
+                $tabControl.SelectedTab = $tabImpostazioni # Ti porta comodamente al tab giusto
+            } else {
+                [System.Windows.Forms.MessageBox]::Show("Admin Mode DISATTIVATA.`nLa modifica dei TAG è tornata in sola lettura.", "Admin Mode Bloccata", 0, 64)
+            }
+            $adminForm.Close()
+        })
+        $adminForm.Controls.Add($btnToggleAdmin)
+
         $adminForm.ShowDialog()
     }
 })
-# --- FINE BLOCCO ADMIN MODE ---
+#Fine blocco Admin Mode
 
 # === INSERIMENTO IMMAGINE RALPH NEL FORM ===
 $picRalph = New-Object System.Windows.Forms.PictureBox
@@ -1365,6 +1413,96 @@ $chkNascondiUmore.Add_CheckedChanged({
     Applica-VisibilitaUmore
     Save-Settings
 })
+
+# --- INIZIO VARIABILE ADMIN MODE ---
+$script:isAdminMode = $false
+# --- FINE VARIABILE ADMIN MODE ---
+
+# --- INTERFACCIA GESTIONE TAG (TAB IMPOSTAZIONI) ---
+$lblAdminTags = New-Object System.Windows.Forms.Label
+$lblAdminTags.Text = "Gestione TAG e Colori (Sbloccabile via Menu Admin Ctrl+Shift+A):"
+$lblAdminTags.Font = $fontLabelBold
+$lblAdminTags.Location = New-Object System.Drawing.Point(20, 570)
+$lblAdminTags.Size = New-Object System.Drawing.Size(500, 20)
+$tabImpostazioni.Controls.Add($lblAdminTags)
+
+$dgvTags = New-Object System.Windows.Forms.DataGridView
+$dgvTags.Location = New-Object System.Drawing.Point(20, 595)
+$dgvTags.Size = New-Object System.Drawing.Size(400, 130)
+$dgvTags.AllowUserToAddRows = $false
+$dgvTags.AllowUserToDeleteRows = $false
+$dgvTags.AutoSizeColumnsMode = "Fill"
+$dgvTags.Enabled = $false # DISABILITATO DI DEFAULT (Grigio)
+
+$dgvTags.Columns.Add("Tag", "Nome TAG") | Out-Null
+$dgvTags.Columns[0].ReadOnly = $true
+
+$colVisible = New-Object System.Windows.Forms.DataGridViewCheckBoxColumn
+$colVisible.Name = "Visible"
+$colVisible.HeaderText = "Visibile"
+$dgvTags.Columns.Add($colVisible) | Out-Null
+
+$colColor = New-Object System.Windows.Forms.DataGridViewButtonColumn
+$colColor.Name = "Color"
+$colColor.HeaderText = "Colore (Clicca)"
+$colColor.FlatStyle = "Flat"
+$dgvTags.Columns.Add($colColor) | Out-Null
+
+$tabImpostazioni.Controls.Add($dgvTags)
+
+$btnSalvaTag = New-Object System.Windows.Forms.Button
+$btnSalvaTag.Text = "Salva Impostazioni TAG"
+$btnSalvaTag.Location = New-Object System.Drawing.Point(430, 595)
+$btnSalvaTag.Size = New-Object System.Drawing.Size(150, 40)
+$btnSalvaTag.BackColor = [System.Drawing.Color]::FromArgb(5, 150, 105)
+$btnSalvaTag.ForeColor = [System.Drawing.Color]::White
+$btnSalvaTag.Enabled = $false # DISABILITATO DI DEFAULT (Grigio)
+$tabImpostazioni.Controls.Add($btnSalvaTag)
+
+function Popola-DgvTags {
+    $dgvTags.Rows.Clear()
+    foreach ($k in $global:customTags.Keys | Sort-Object) {
+        $rIdx = $dgvTags.Rows.Add()
+        $dgvTags.Rows[$rIdx].Cells["Tag"].Value = $k
+        $dgvTags.Rows[$rIdx].Cells["Visible"].Value = $global:customTags[$k].Visible
+        $dgvTags.Rows[$rIdx].Cells["Color"].Style.BackColor = $global:customTags[$k].Color
+        $dgvTags.Rows[$rIdx].Cells["Color"].Style.SelectionBackColor = $global:customTags[$k].Color
+    }
+}
+Popola-DgvTags
+
+$dgvTags.Add_CellContentClick({
+    param($sender, $e)
+    if ($script:isAdminMode -and $e.ColumnIndex -eq 2 -and $e.RowIndex -ge 0) {
+        $cd = New-Object System.Windows.Forms.ColorDialog
+        $cd.Color = $dgvTags.Rows[$e.RowIndex].Cells["Color"].Style.BackColor
+        if ($cd.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+            $dgvTags.Rows[$e.RowIndex].Cells["Color"].Style.BackColor = $cd.Color
+            $dgvTags.Rows[$e.RowIndex].Cells["Color"].Style.SelectionBackColor = $cd.Color
+        }
+    }
+})
+
+$btnSalvaTag.Add_Click({
+    $lista = New-Object System.Collections.Generic.List[PSObject]
+    foreach ($row in $dgvTags.Rows) {
+        $c = $row.Cells["Color"].Style.BackColor
+        $hex = [System.Drawing.ColorTranslator]::ToHtml($c)
+        $lista.Add([PSCustomObject]@{
+            Tag = $row.Cells["Tag"].Value
+            ColorHex = $hex
+            Visible = $row.Cells["Visible"].Value
+        })
+    }
+    $lista | Export-Csv $global:tagsConfigPath -Delimiter ";" -NoTypeInformation -Encoding UTF8
+    Load-TagsConfig
+    Aggiorna-ComboTags
+    Aggiorna-MatriceColleghi
+    if ($script:datiElaborati -or $calDiario) { Aggiorna-ContatoriDiario }
+    Popola-DgvTags
+    [System.Windows.Forms.MessageBox]::Show("Tag aggiornati correttamente!", "Ralph-o-Clock Info")
+})
+# --- FINE INTERFACCIA GESTIONE TAG ---
 
 # --- Setup Tab Diario Agenda e Statistiche Dinamiche ---
 $script:diarioCsvPath = Join-Path $script:cartellaDati "diario_agenda_$usr.csv"
