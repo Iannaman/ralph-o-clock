@@ -36,6 +36,39 @@ $script:csvPath       = Join-Path $script:cartellaDati "registro_orari_$usr.csv"
 $script:pomoCsvPath   = Join-Path $script:cartellaDati "pomodoro_tasks_$usr.csv"
 $script:templatePath  = Join-Path $script:cartellaDati "pomodoro_templates_$usr.csv"
 
+$global:tagsConfigPath = Join-Path $script:cartellaDati "tags_config.csv"
+$global:customTags = @{}
+
+function Load-TagsConfig {
+    $global:customTags.Clear()
+    if (-not (Test-Path $global:tagsConfigPath)) {
+        $defaults = @"
+Tag;ColorHex;Visible
+UFFICIO;#87CEEB;True
+SWOR;#7FFFD4;True
+FERIE;#DDA0DD;True
+exFest;#FF6347;True
+104;#FFFF00;True
+LREM;#20B2AA;True
+ASS;#B0E0E6;True
+FEST;#F08080;True
+MAL;#DB7093;True
+"@
+        $defaults | Set-Content $global:tagsConfigPath -Encoding UTF8
+    }
+    
+    $csv = Import-Csv $global:tagsConfigPath -Delimiter ";" -Encoding UTF8
+    foreach ($r in $csv) {
+        if (-not [string]::IsNullOrWhiteSpace($r.Tag)) {
+            $global:customTags[$r.Tag] = @{
+                Color = [System.Drawing.ColorTranslator]::FromHtml($r.ColorHex)
+                Visible = [bool]::Parse($r.Visible)
+            }
+        }
+    }
+}
+Load-TagsConfig
+
 $iconPath = Join-Path $cartellaScript "img\ralph.ico"
 $imgPath = Join-Path $cartellaScript "img\ralph.png"
 $audioPath = Join-Path $cartellaScript "audio\Ralph-bark.wav"
@@ -131,7 +164,7 @@ $azioneRicalcolo = {
 
 # --- Finestra Principale ---
 $form = New-Object System.Windows.Forms.Form
-$form.Text = "Ralph-o-Clock - Registro Orari & Umore - v.3.01" 
+$form.Text = "Ralph-o-Clock - Registro Orari & Umore - v.3.5" 
 $form.Size = New-Object System.Drawing.Size(1100, 830)
 $form.StartPosition = "CenterScreen"
 $form.FormBorderStyle = "FixedDialog"
@@ -179,7 +212,7 @@ function Impersona-Utente {
         $form.Text = "Ralph-o-Clock - Impersonificando: $NuovoUtente"
         $btnExitImpersonation.Visible = $true
     } else {
-        $form.Text = "Ralph-o-Clock - Registro Orari & Umore - v.3.01"
+        $form.Text = "Ralph-o-Clock - Registro Orari & Umore - v.3.5"
         $btnExitImpersonation.Visible = $false
     }
 
@@ -265,20 +298,20 @@ $form.Add_KeyDown({
         })
         $adminForm.Controls.Add($btnApplica)
         
-        # --- SEZIONE 2: SBLOCCO IMPOSTAZIONI TAG ---
+        # --- SEZIONE 2: SBLOCCO IMPOSTAZIONI TAG E NOTE ---
         $lblAdmin = New-Object System.Windows.Forms.Label
-        $lblAdmin.Text = "2. Configurazione Sistema:"
+        $lblAdmin.Text = "2. Modalità Supervisore (Impostazioni e Note):"
         $lblAdmin.Font = $fontLabelBold
         $lblAdmin.Location = New-Object System.Drawing.Point(15, 115)
-        $lblAdmin.Size = New-Object System.Drawing.Size(250, 20)
+        $lblAdmin.Size = New-Object System.Drawing.Size(270, 20)
         $adminForm.Controls.Add($lblAdmin)
 
         $btnToggleAdmin = New-Object System.Windows.Forms.Button
         if ($script:isAdminMode) {
-            $btnToggleAdmin.Text = "Blocca Modifica TAG"
+            $btnToggleAdmin.Text = "Blocca Modalità Supervisore"
             $btnToggleAdmin.BackColor = [System.Drawing.Color]::IndianRed
         } else {
-            $btnToggleAdmin.Text = "Sblocca Modifica TAG"
+            $btnToggleAdmin.Text = "Sblocca Modalità Supervisore"
             $btnToggleAdmin.BackColor = [System.Drawing.Color]::FromArgb(71, 85, 105)
         }
         $btnToggleAdmin.ForeColor = [System.Drawing.Color]::White
@@ -286,18 +319,20 @@ $form.Add_KeyDown({
         $btnToggleAdmin.Size = New-Object System.Drawing.Size(250, 35)
         
         $btnToggleAdmin.Add_Click({
-            # Inverte lo stato di Admin Mode
+            # Inverte lo stato
             $script:isAdminMode = -not $script:isAdminMode
             
-            # Abilita/Disabilita la UI nel tab Impostazioni
+            # Abilita/Disabilita le griglie in Impostazioni
             $dgvTags.Enabled = $script:isAdminMode
             $btnSalvaTag.Enabled = $script:isAdminMode
             
+            # AGGIUNTA CHIAVE: Ricarica la matrice per aggiornare al volo i ToolTip per tutti!
+            Aggiorna-MatriceColleghi
+
             if ($script:isAdminMode) {
-                [System.Windows.Forms.MessageBox]::Show("Admin Mode ATTIVATA.`nOra puoi modificare la tabella dei TAG nel tab 'Impostazioni'.", "Admin Mode Sbloccata", 0, 64)
-                $tabControl.SelectedTab = $tabImpostazioni # Ti porta comodamente al tab giusto
+                [System.Windows.Forms.MessageBox]::Show("Modalità Supervisore ATTIVATA.`n- Visualizzazione Note di tutti i colleghi sbloccata.`n- Modifica TAG abilitata.", "Supervisore Sbloccato", 0, 64)
             } else {
-                [System.Windows.Forms.MessageBox]::Show("Admin Mode DISATTIVATA.`nLa modifica dei TAG è tornata in sola lettura.", "Admin Mode Bloccata", 0, 64)
+                [System.Windows.Forms.MessageBox]::Show("Modalità Supervisore DISATTIVATA.", "Supervisore Bloccato", 0, 64)
             }
             $adminForm.Close()
         })
@@ -1181,6 +1216,11 @@ $dgvColleghi.DefaultCellStyle.Alignment = [System.Windows.Forms.DataGridViewCont
 $tabColleghi.Controls.Add($dgvColleghi)
 $dgvColleghi.BringToFront()
 
+
+
+$tabColleghi.Controls.Add($dgvColleghi)
+$dgvColleghi.BringToFront()
+
 $btnAggiornaColleghi.Add_Click({
     Aggiorna-MatriceColleghi
 })
@@ -1235,16 +1275,9 @@ function Aggiorna-MatriceColleghi {
         }
     }
     
-    $coloriTag = @{
-        "UFFICIO" = [System.Drawing.Color]::AliceBlue
-        "SWOR"    = [System.Drawing.Color]::AquaMarine
-        "FERIE"   = [System.Drawing.Color]::Plum
-	    "exFest"  = [System.Drawing.Color]::Tomato
-        "104"     = [System.Drawing.Color]::Khaki
-        "LREM"    = [System.Drawing.Color]::LightSeaGreen
-        "ASS"     = [System.Drawing.Color]::PowderBlue
-        "FEST"    = [System.Drawing.Color]::IndianRed
-        "MAL"     = [System.Drawing.Color]::PaleVioletRed
+    $coloriTag = @{}
+    foreach ($k in $global:customTags.Keys) {
+        $coloriTag[$k] = $global:customTags[$k].Color
     }
     
     $percorso = if ($script:cartellaDati) { $script:cartellaDati } else { ".\dati" }
@@ -1282,12 +1315,25 @@ function Aggiorna-MatriceColleghi {
                     
                     if ($chiaveColonna -and $dgvColleghi.Columns.Contains($chiaveColonna)) {
                         $tag = if ($record.Tag) { $record.Tag.ToUpper().Trim() } else { "" }
+                        
                         if ($tag -ne "") {
                             $riga.Cells[$chiaveColonna].Value = $tag
                             if ($coloriTag.ContainsKey($tag)) {
                                 $riga.Cells[$chiaveColonna].Style.BackColor = $coloriTag[$tag]
                             } else {
                                 $riga.Cells[$chiaveColonna].Style.BackColor = [System.Drawing.Color]::WhiteSmoke
+                            }
+                        }                        
+                            #
+                        if ($record.Note -and $record.Note.Trim() -ne "") {
+                            $testoNota = $record.Note.Trim()
+                            
+                            # Se l'Admin Mode è attivo OPPURE la riga appartiene all'utente loggato, mostra la nota
+                            if ($script:isAdminMode -or $nomeCollega -eq $usr) {
+                                $riga.Cells[$chiaveColonna].ToolTipText = $testoNota
+                            } else {
+                                # Se non sei admin e sbirci gli altri, la nota è oscurata
+                                $riga.Cells[$chiaveColonna].ToolTipText = "🔒 Privato"
                             }
                         }
                     }
@@ -1429,13 +1475,13 @@ $tabImpostazioni.Controls.Add($lblAdminTags)
 $dgvTags = New-Object System.Windows.Forms.DataGridView
 $dgvTags.Location = New-Object System.Drawing.Point(20, 595)
 $dgvTags.Size = New-Object System.Drawing.Size(400, 130)
-$dgvTags.AllowUserToAddRows = $false
-$dgvTags.AllowUserToDeleteRows = $false
+$dgvTags.AllowUserToAddRows = $true      # SBLOCCATO: permette di aggiungere Tag
+$dgvTags.AllowUserToDeleteRows = $true   # SBLOCCATO: permette di cancellare Tag (tasto Canc)
 $dgvTags.AutoSizeColumnsMode = "Fill"
-$dgvTags.Enabled = $false # DISABILITATO DI DEFAULT (Grigio)
+$dgvTags.Enabled = $false
 
 $dgvTags.Columns.Add("Tag", "Nome TAG") | Out-Null
-$dgvTags.Columns[0].ReadOnly = $true
+$dgvTags.Columns[0].ReadOnly = $false    # SBLOCCATO: permette di scrivere il nome
 
 $colVisible = New-Object System.Windows.Forms.DataGridViewCheckBoxColumn
 $colVisible.Name = "Visible"
@@ -1456,7 +1502,7 @@ $btnSalvaTag.Location = New-Object System.Drawing.Point(430, 595)
 $btnSalvaTag.Size = New-Object System.Drawing.Size(150, 40)
 $btnSalvaTag.BackColor = [System.Drawing.Color]::FromArgb(5, 150, 105)
 $btnSalvaTag.ForeColor = [System.Drawing.Color]::White
-$btnSalvaTag.Enabled = $false # DISABILITATO DI DEFAULT (Grigio)
+$btnSalvaTag.Enabled = $false 
 $tabImpostazioni.Controls.Add($btnSalvaTag)
 
 function Popola-DgvTags {
@@ -1475,7 +1521,11 @@ $dgvTags.Add_CellContentClick({
     param($sender, $e)
     if ($script:isAdminMode -and $e.ColumnIndex -eq 2 -and $e.RowIndex -ge 0) {
         $cd = New-Object System.Windows.Forms.ColorDialog
-        $cd.Color = $dgvTags.Rows[$e.RowIndex].Cells["Color"].Style.BackColor
+        # Se la cella non ha un colore impostato (nuova riga), usa il bianco di default
+        $currentColor = $dgvTags.Rows[$e.RowIndex].Cells["Color"].Style.BackColor
+        if ($currentColor.IsEmpty) { $currentColor = [System.Drawing.Color]::White }
+        $cd.Color = $currentColor
+        
         if ($cd.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
             $dgvTags.Rows[$e.RowIndex].Cells["Color"].Style.BackColor = $cd.Color
             $dgvTags.Rows[$e.RowIndex].Cells["Color"].Style.SelectionBackColor = $cd.Color
@@ -1486,21 +1536,28 @@ $dgvTags.Add_CellContentClick({
 $btnSalvaTag.Add_Click({
     $lista = New-Object System.Collections.Generic.List[PSObject]
     foreach ($row in $dgvTags.Rows) {
-        $c = $row.Cells["Color"].Style.BackColor
-        $hex = [System.Drawing.ColorTranslator]::ToHtml($c)
-        $lista.Add([PSCustomObject]@{
-            Tag = $row.Cells["Tag"].Value
-            ColorHex = $hex
-            Visible = $row.Cells["Visible"].Value
-        })
+        if (-not $row.IsNewRow -and -not [string]::IsNullOrWhiteSpace($row.Cells["Tag"].Value)) {
+            $c = $row.Cells["Color"].Style.BackColor
+            if ($c.IsEmpty) { $c = [System.Drawing.Color]::White }
+            $hex = [System.Drawing.ColorTranslator]::ToHtml($c)
+            
+            # Gestione default checkbox per nuove righe
+            $vis = if ($row.Cells["Visible"].Value -eq $null) { $true } else { $row.Cells["Visible"].Value }
+            
+            $lista.Add([PSCustomObject]@{
+                Tag = $row.Cells["Tag"].Value.ToString().Trim()
+                ColorHex = $hex
+                Visible = $vis
+            })
+        }
     }
     $lista | Export-Csv $global:tagsConfigPath -Delimiter ";" -NoTypeInformation -Encoding UTF8
     Load-TagsConfig
-    Aggiorna-ComboTags
+    if (Get-Command Aggiorna-ComboTags -ErrorAction SilentlyContinue) { Aggiorna-ComboTags }
     Aggiorna-MatriceColleghi
     if ($script:datiElaborati -or $calDiario) { Aggiorna-ContatoriDiario }
     Popola-DgvTags
-    [System.Windows.Forms.MessageBox]::Show("Tag aggiornati correttamente!", "Ralph-o-Clock Info")
+    [System.Windows.Forms.MessageBox]::Show("Tag salvati! Saranno applicati per tutti i dipendenti.", "Ralph-o-Clock Info")
 })
 # --- FINE INTERFACCIA GESTIONE TAG ---
 
@@ -1543,6 +1600,7 @@ function Save-Diario {
         })
     }
     $lista | Export-Csv -Path $script:diarioCsvPath -NoTypeInformation -Delimiter ";" -Encoding UTF8
+    Aggiorna-MatriceColleghi
 }
 
 function Format-ColoredStats {
@@ -1551,16 +1609,9 @@ function Format-ColoredStats {
     $rtb.SelectionColor = [System.Drawing.Color]::Black
     $rtb.AppendText($text)
 
-    $coloriTag = @{
-        "UFFICIO" = [System.Drawing.Color]::SkyBlue
-        "SWOR"    = [System.Drawing.Color]::AquaMarine
-        "FERIE"   = [System.Drawing.Color]::Plum
-	    "exFest"  = [System.Drawing.Color]::Tomato
-        "104"     = [System.Drawing.Color]::Khaki
-        "LREM"    = [System.Drawing.Color]::LightSeaGreen
-        "ASS"     = [System.Drawing.Color]::PowderBlue
-        "FEST"    = [System.Drawing.Color]::IndianRed
-        "MAL"     = [System.Drawing.Color]::PaleVioletRed
+    $coloriTag = @{}
+    foreach ($k in $global:customTags.Keys) {
+        $coloriTag[$k] = $global:customTags[$k].Color
     }
 
     foreach ($key in $coloriTag.Keys) {
@@ -1604,8 +1655,12 @@ function Aggiorna-ContatoriDiario {
     
     if ($salvataggioNecessario) { Save-Diario } 
 
-    $contatori = @{ "SWOR"=0; "FERIE"=0; "exFest"=0;  "104"=0; "UFFICIO"=0; "LREM"=0; "ASS"=0; "FEST"=0; "MAL"=0 }
-    $contAnno = @{ "SWOR"=0; "FERIE"=0; "exFest"=0;  "104"=0; "UFFICIO"=0; "LREM"=0; "ASS"=0; "FEST"=0; "MAL"=0 }
+    $contatori = @{}
+    $contAnno = @{}
+    foreach ($k in $global:customTags.Keys) { 
+        $contatori[$k] = 0
+        $contAnno[$k] = 0 
+    }
     
     foreach ($dataKey in @($script:diarioTags.Keys)) {
         # Questa regex ora funzionerà sempre su tutti i dati vecchi grazie alla normalizzazione in Load-Diario!
@@ -1633,16 +1688,37 @@ function Aggiorna-ContatoriDiario {
     $totFestivi = $contatori["FEST"]
     $totLavorativi = $giorniNelMese - $totFestivi
 
-    $testoMese = "Mese: {0:00}/{1} (Totali: {2} | Lavorativi: {3} | Festivi: {4})`n`n" -f $meseSel, $annoSel, $giorniNelMese, $totLavorativi, $totFestivi +
-                 "SWOR: $($contatori['SWOR'])  |  UFFICIO: $($contatori['UFFICIO'])  |  LREM: $($contatori['LREM'])  |  ASS: $($contatori['ASS'])`n" +
-                 "FERIE: $($contatori['FERIE'])  | exFest: $($contatori['exFest']) | 104: $($contatori['104'])  |  FEST: $($contatori['FEST']) | MAL: $($contatori['MAL'])"
-    Format-ColoredStats -rtb $rtbStatsMese -text $testoMese
+    $totFestivi = if ($contatori.ContainsKey("FEST")) { $contatori["FEST"] } else { 0 }
+    $totLavorativi = $giorniNelMese - $totFestivi
 
-    $testoAnno = "Anno: {0}`n`n" -f $annoSel +
-                 "SWOR: $($contAnno['SWOR'])  |  UFFICIO: $($contAnno['UFFICIO'])  |  LREM: $($contAnno['LREM'])  |  ASS: $($contAnno['ASS'])`n" +
-                 "FERIE: $($contAnno['FERIE'])  | exFest: $($contAnno['exFest']) | 104: $($contAnno['104'])  |  FEST: $($contAnno['FEST']) | MAL: $($contAnno['MAL'])"
-    Format-ColoredStats -rtb $rtbStatsAnno -text $testoAnno
-}
+    # --- NUOVO CALCOLO PER STATISTICHE ANNUALI ---
+    $totFestiviAnno = if ($contAnno.ContainsKey("FEST")) { $contAnno["FEST"] } else { 0 }
+    $totLavorativiAnno = $giorniNellAnno - $totFestiviAnno
+
+    # Formattazione coerente dei titoli per entrambi i TAB
+    $testoMese = "Mese: {0:00}/{1} (Totali: {2} | Lavorativi: {3} | Festivi: {4})`n`n" -f $meseSel, $annoSel, $giorniNelMese, $totLavorativi, $totFestivi
+    $testoAnno = "Anno: {0} (Totali: {1} | Lavorativi: {2} | Festivi: {3})`n`n" -f $annoSel, $giorniNellAnno, $totLavorativiAnno, $totFestiviAnno
+
+    $rigaMese = ""; $rigaAnno = ""; $i = 0
+    
+    # Mantiene l'ordine personalizzato richiesto
+    $ordineRichiesto = @("UFFICIO", "SWOR", "LREM", "FERIE", "exFest", "104", "ASS", "FEST", "MAL")
+    $tagOrdinati = $ordineRichiesto + ($global:customTags.Keys | Where-Object { $_ -notin $ordineRichiesto })
+
+    foreach ($k in $tagOrdinati) {
+        if ($global:customTags.ContainsKey($k) -and $global:customTags[$k].Visible) {
+            $rigaMese += "$($k): $($contatori[$k])   |   "
+            $rigaAnno += "$($k): $($contAnno[$k])   |   "
+            $i++
+            if ($i % 5 -eq 0) { $rigaMese += "`n"; $rigaAnno += "`n" }
+        }
+    }
+
+    $testoMese += $rigaMese.TrimEnd(" | `n")
+    $testoAnno += $rigaAnno.TrimEnd(" | `n")
+
+    Format-ColoredStats -rtb $rtbStatsMese -text $testoMese
+    Format-ColoredStats -rtb $rtbStatsAnno -text $testoAnno}
 
 $calDiario = New-Object System.Windows.Forms.MonthCalendar
 $calDiario.Location = New-Object System.Drawing.Point(450, 20)
@@ -1666,7 +1742,23 @@ $cbTag = New-Object System.Windows.Forms.ComboBox
 $cbTag.Location = New-Object System.Drawing.Point(110, 48)
 $cbTag.Size = New-Object System.Drawing.Size(150, 25)
 $cbTag.DropDownStyle = [System.Windows.Forms.ComboBoxStyle]::DropDownList
-$cbTag.Items.AddRange(@("", "SWOR", "FERIE","exFest", "104", "UFFICIO", "LREM", "ASS", "FEST", "MAL"))
+function Aggiorna-ComboTags {
+    $val = $cbTag.SelectedItem
+    $cbTag.Items.Clear()
+    $cbTag.Items.Add("") | Out-Null
+    foreach ($k in $global:customTags.Keys | Sort-Object) {
+        if ($global:customTags[$k].Visible) {
+            $cbTag.Items.Add($k) | Out-Null
+        }
+    }
+    # AGGIORNATO: Controllo di sicurezza prima del Contains
+    if ($null -ne $val -and $cbTag.Items.Contains($val)) { 
+        $cbTag.SelectedItem = $val 
+    } else { 
+        $cbTag.SelectedIndex = 0 
+    }
+}
+Aggiorna-ComboTags
 $tabDiario.Controls.Add($cbTag)
 
 $chkAutosave = New-Object System.Windows.Forms.CheckBox
@@ -1787,17 +1879,14 @@ $cbTag.Add_SelectedIndexChanged({
     $cbTag.ForeColor = [System.Drawing.Color]::Black
     $txtDiarioNote.BackColor = [System.Drawing.Color]::White
 
-    switch ($sel) {
-        "SWOR" { $cbTag.BackColor = [System.Drawing.Color]::AquaMarine; $toolTipTag.SetToolTip($cbTag, "SmartWorking") }
-        "FERIE" { $cbTag.BackColor = [System.Drawing.Color]::Plum; $txtDiarioNote.BackColor = [System.Drawing.Color]::Plum; $toolTipTag.SetToolTip($cbTag, "Ferie") }
-	    "exFest" { $cbTag.BackColor = [System.Drawing.Color]::Tomato; $txtDiarioNote.BackColor = [System.Drawing.Color]::Tomato; $toolTipTag.SetToolTip($cbTag, "exFest") }
-        "UFFICIO" { $cbTag.BackColor = [System.Drawing.Color]::SkyBlue; $toolTipTag.SetToolTip($cbTag, "Lavoro in presenza") }
-        "LREM" { $cbTag.BackColor = [System.Drawing.Color]::LightSeaGreen; $cbTag.ForeColor = [System.Drawing.Color]::White; $toolTipTag.SetToolTip($cbTag, "Lavoro da Remoto") }
-        "ASS" { $cbTag.BackColor = [System.Drawing.Color]::PowderBlue; $cbTag.ForeColor = [System.Drawing.Color]::White; $txtDiarioNote.BackColor = [System.Drawing.Color]::PowderBlue; $toolTipTag.SetToolTip($cbTag, "Assemblea") }
-        "104" { $cbTag.BackColor = [System.Drawing.Color]::Yellow; $txtDiarioNote.BackColor = [System.Drawing.Color]::Yellow; $toolTipTag.SetToolTip($cbTag, "Permesso Legge 104") }
-        "FEST" { $cbTag.BackColor = [System.Drawing.Color]::LightCoral; $txtDiarioNote.BackColor = [System.Drawing.Color]::LightCoral; $toolTipTag.SetToolTip($cbTag, "Giorno Festivo (Sab/Dom/Feste)") }
-        "MAL" { $cbTag.BackColor = [System.Drawing.Color]::PaleVioletRed; $txtDiarioNote.BackColor = [System.Drawing.Color]::PaleVioletRed; $toolTipTag.SetToolTip($cbTag, "Malattia") }
-        default { $cbTag.BackColor = [System.Drawing.Color]::White; $toolTipTag.SetToolTip($cbTag, "Seleziona una tipologia") }
+    if ($sel -and $sel -ne "" -and $global:customTags.ContainsKey($sel)) {
+        $c = $global:customTags[$sel].Color
+        $cbTag.BackColor = $c
+        $txtDiarioNote.BackColor = $c
+        $toolTipTag.SetToolTip($cbTag, $sel)
+    } else {
+        $cbTag.BackColor = [System.Drawing.Color]::White
+        $toolTipTag.SetToolTip($cbTag, "Seleziona una tipologia")
     }
 
     if ($chkAutosave.Checked) {
